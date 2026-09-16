@@ -23,6 +23,8 @@ work/venv/bin/python outputs/observatory/tests/validate_api.py
 
 **Server.** Port 8766 is serving this revision-4 code with disposable job `d81656302d72` **complete** (10,000 particles, 2 galaxies, 201 frames, lifecycle off) under `work/observatory-data` (gitignored). Ctrl+C is a graceful shutdown. Tests used 8767.
 
+**Outstanding / honest limits.** Superparticles, collisionless, no SPH/ram pressure, no FoF remapping. Default 245 Myr is a first passage, not MW–M31. Barnes–Hut with several dense concentrations is coarser than an isolated galaxy. Birth-galaxy colors stay frozen. This cloud workspace has no archived `44c528079f88/model_source.py`; isolated bit-match is against `origin/main` revision-3 `physics.py` when git is available.
+
 ## Local Git setup (2026-09-16)
 
 Initialized a local repository on `main` and captured the current revision-3 project as the initial baseline. Earlier agent edit history is unavailable; archived run sources and historical benchmark files remain the older evidence. No remote was created. Source, documentation, helper scripts, bundled assets, and benchmark evidence are tracked; installed runtimes, live experiment data, logs, caches, and local environment secrets are ignored and remain on disk. See `outputs/GIT_GUIDE.md` for handoff and recovery commands.
