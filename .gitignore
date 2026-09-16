@@ -16,3 +16,6 @@ work/*.log
 .env
 .env.*
 !.env.example
+
+# Isolated queue browser-test experiments
+work/queue-ui-data/

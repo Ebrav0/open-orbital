@@ -2,7 +2,8 @@
 // Never imports three, never fetches frames.bin, never allocates particle arrays. Tab budget: 300 MB.
 import {slidersFor,defaultsFor,toConfig,fromConfig,estimateSeconds,maxDuration,durationCap,engineRamGb,fmt,fmtHours,fmtSeconds,fmtNum,percent,api,phaseLabel,WALL_CAP_HOURS,MYR_PER_TIME} from './shared.js';
 const $=id=>document.getElementById(id);
-const DRAFT_KEY='orbital-lab-draft-v1',ACTIVE=['running','initializing','queued','pausing'];
+const DRAFT_KEY='orbital-lab-draft-v1',ACTIVE=['running','initializing','pausing'];
+let queue={enabled:false,ids:[]};
 let mode='galaxy',values={galaxy:defaultsFor('galaxy'),planets:defaultsFor('planets')},jobs=[],selectedId=null,pollTimer=null,saveTimer=null,toastTimer=null,etaTimer=null,polling=false,eventLines=20,rows={},logOpen=false,pauseEta=null;
 function toast(message){$('toast').textContent=message;$('toast').classList.remove('hidden');clearTimeout(toastTimer);toastTimer=setTimeout(()=>$('toast').classList.add('hidden'),6500)}
 function loadDraft(){try{const d=JSON.parse(localStorage.getItem(DRAFT_KEY)||'null');if(!d)return;if(d.mode==='galaxy'||d.mode==='planets')mode=d.mode;for(const m of['galaxy','planets']){if(d[m]&&typeof d[m]==='object'){const base=defaultsFor(m);for(const s of slidersFor(m))if(d[m][s.id]!=null)base[s.id]=d[m][s.id];values[m]=base}}}catch(e){localStorage.removeItem(DRAFT_KEY)}}
@@ -27,7 +28,8 @@ $('estimate-time').textContent=`${fmtHours(hours)} estimated wall`;
 $('estimate-detail').textContent=cap?`${span} · ${size}${steps!=null?` · ${fmt(steps)} leapfrog steps`:''} · fits the ${WALL_CAP_HOURS} h cap (max span ${mode==='galaxy'?`${fmt(maxSpan)} model units / ${Math.round(maxSpan*MYR_PER_TIME).toLocaleString('en-US')} Myr`:`${maxSpan.toFixed(1)} yr`}) · engine ~${engineRamGb(cfg).toFixed(2)} GB RAM (separate from this dashboard). θ and softening are not in this timing model.`:`${span} · ${size} · exceeds the ${WALL_CAP_HOURS} h cap — lower N, raise threads, coarsen dt, or shorten the span (max ≈ ${mode==='galaxy'?`${fmt(Math.floor(maxSpan))} model units`:`${maxSpan.toFixed(1)} yr`}).`;
 $('estimate').classList.toggle('over',!cap);
 const busy=$('start-compute').dataset.busy==='1';
-const blocked=jobs.some(j=>ACTIVE.includes(j.status.phase));
+const blocked=queue.enabled||jobs.some(j=>ACTIVE.includes(j.status.phase));
+$('add-queue').disabled=!cap||$('add-queue').dataset.busy==='1';
 $('start-compute').disabled=!cap||busy||blocked;
 $('start-compute').title=busy?'Starting…':blocked?'Pause or finish the running experiment before starting another.':cap?'Start a new experiment from the sliders on the left.':'This draft exceeds the 120-hour compute cap.'}
 function remainingPauseSeconds(){if(!pauseEta)return null;if(pauseEta.unbounded)return null;return Math.max(0,pauseEta.seconds-(Date.now()/1000-pauseEta.at))}
@@ -76,7 +78,7 @@ box.append(card)}}
 async function removeRun(j){const lines=[`Remove experiment ${j.id}?`,`${j.config.mode} · ${fmt(j.meta?.n||j.config.n)} particles · ${phaseLabel(j.status)}`,'This deletes frames and checkpoints on disk.'];if(j.status.phase==='paused')lines.push('This will stop the paused worker, then delete.');if(!confirm(lines.join('\n')))return;try{await api(`/api/jobs/${j.id}`,undefined,'DELETE');if(selectedId===j.id)selectedId=null;toast(`Removed ${j.id}.`);await poll()}catch(e){toast(e.message)}}
 function heap(){const mem=performance.memory;if(!mem){$('heap').textContent='JS heap n/a (Chrome only) · tab budget 300 MB';return}const mb=mem.usedJSHeapSize/1048576;$('heap').textContent=`JS heap ${mb.toFixed(0)} MB · tab budget 300 MB`;if(mb>220){eventLines=5;$('heap').classList.add('warn')}else if(mb>150){console.warn(`Compute page heap ${mb.toFixed(0)} MB`);$('heap').classList.add('warn')}else{$('heap').classList.remove('warn');eventLines=20}}
 function pollDelay(){const j=target();if(!j)return 2000;if(j.status.pause_pending||j.status.phase==='pausing')return 400;if(ACTIVE.includes(j.status.phase))return 1000;return 2000}
-async function poll(){if(polling||document.hidden)return;polling=true;try{jobs=await api('/api/jobs?view=summary');renderStatus();renderRuns();updateEstimate();if(logOpen)await refreshLog()}catch(e){$('phase').textContent='Server unavailable';$('status-sub').textContent='Restart the local app (Start Open Orbital.command).'}finally{polling=false;heap()}}
+async function poll(){if(polling||document.hidden)return;polling=true;try{[jobs,queue]=await Promise.all([api('/api/jobs?view=summary'),api('/api/queue')]);renderQueue();renderStatus();renderRuns();updateEstimate();if(logOpen)await refreshLog()}catch(e){$('phase').textContent='Server unavailable';$('status-sub').textContent='Restart the local app (Start Open Orbital.command).'}finally{polling=false;heap()}}
 function schedule(){clearTimeout(pollTimer);pollTimer=setTimeout(async()=>{await poll();if(!document.hidden)schedule()},pollDelay())}
 document.addEventListener('visibilitychange',()=>{if(document.hidden)clearTimeout(pollTimer);else{schedule();poll()}});
 async function refreshLog(){const j=target();if(!j)return;try{const {lines}=await api(`/api/jobs/${j.id}/log?tail=40`);$('worker-log').textContent=lines.length?lines.join('\n'):'(worker log is empty)'}catch(e){$('worker-log').textContent=e.message}}
@@ -86,5 +88,26 @@ $('galaxy-tab').onclick=()=>{selectedId=null;setMode('galaxy')};$('planets-tab')
 $('reset-defaults').onclick=()=>{values[mode]=defaultsFor(mode);syncInputs();scheduleSave();toast('Sliders reset to defaults.')};
 $('start-compute').onclick=async()=>{const button=$('start-compute');button.dataset.busy='1';button.disabled=true;try{const cfg=toConfig(mode,values[mode]);cfg.notes=$('notes').value.trim();const j=await api('/api/jobs',cfg);selectedId=j.id;clearTimeout(saveTimer);localStorage.removeItem(DRAFT_KEY);toast('Computation started. Frames will appear on the Observe page.');await poll()}catch(e){toast(e.message);await poll()}finally{button.dataset.busy='0';updateEstimate()}};
 $('stop-compute').onclick=async()=>{const j=target();if(!j)return;const s=j.status;const cancel=s.pause_pending&&!['paused','interrupted'].includes(s.phase);const resume=['paused','interrupted'].includes(s.phase);try{const res=await api(`/api/jobs/${j.id}/control`,{action:resume||cancel?'run':'pause'});if(res.status){const idx=jobs.findIndex(x=>x.id===j.id);if(idx>=0)jobs[idx]={...jobs[idx],status:{...jobs[idx].status,...res.status}};armPauseEta(res.status);renderStatus();renderRuns()}toast(resume?'Computation resume sent.':cancel?'Pause cancelled. The integrator will keep this chunk.':'Stop requested. The integrator checks about four times a second, then writes a checkpoint.');await poll()}catch(e){toast(e.message)}};
-loadDraft();$('notes').value='From Cursor, Claude Fable 5.1: ';setMode(mode);schedule();poll();
+loadDraft();$('notes').value='';setMode(mode);schedule();poll();
 clearInterval(etaTimer);etaTimer=setInterval(renderPauseEta,250);
+
+// Waiting rows use ids persisted by the server, not creation timestamps or mode filters.
+function renderQueue(){
+  $('queue-message').textContent=(queue.enabled?'Enabled. ':'Held. ')+(queue.message||'');
+  $('start-queue').disabled=queue.enabled||(!queue.ids.length&&!queue.current);
+  $('hold-queue').disabled=!queue.enabled;
+  const list=$('queue-list');list.replaceChildren();
+  for(const [index,id] of queue.ids.entries()){
+    const j=jobs.find(x=>x.id===id);if(!j)continue;
+    const row=document.createElement('li');const label=document.createElement('span');
+    label.textContent=`${j.config.mode==='galaxy'?fmt(j.config.n)+' particles':'Planetary system'} · ${fmtSeconds(j.config.estimated_seconds)} estimated · ${j.config.notes||id}`;row.append(label);
+    for(const [text,action,disabled] of [['Move up','up',index===0],['Move down','down',index===queue.ids.length-1]]){
+      const b=document.createElement('button');b.className='secondary small';b.textContent=text;b.disabled=disabled;b.onclick=()=>changeQueue(action,id);row.append(b);
+    }
+    const rm=document.createElement('button');rm.className='secondary small';rm.textContent='Remove';rm.onclick=()=>removeRun(j);row.append(rm);list.append(row);
+  }
+  if(!queue.ids.length){const li=document.createElement('li');li.textContent='No waiting experiments.';list.append(li)}
+}
+async function changeQueue(action,id){try{await api('/api/queue',{action,id});await poll()}catch(e){toast(e.message)}}
+$('start-queue').onclick=()=>changeQueue('start');$('hold-queue').onclick=()=>changeQueue('hold');
+$('add-queue').onclick=async()=>{const b=$('add-queue');b.dataset.busy='1';b.disabled=true;try{const cfg=toConfig(mode,values[mode]);cfg.notes=$('notes').value.trim();await api('/api/queue/jobs',cfg);toast('Experiment added to the queue.');await poll()}catch(e){toast(e.message)}finally{b.dataset.busy='0';updateEstimate()}};

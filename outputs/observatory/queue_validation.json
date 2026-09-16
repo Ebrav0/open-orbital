@@ -1,0 +1,11 @@
+{
+  "order_persisted": true,
+  "reordered": true,
+  "restart_held": true,
+  "pause_blocks_next": true,
+  "hold_allows_current_to_finish": true,
+  "sequential_completion": true,
+  "queued_removal": true,
+  "error_holds_queue": true,
+  "explicit_continue_after_error": true
+}

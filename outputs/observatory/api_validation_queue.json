@@ -1,0 +1,33 @@
+{
+  "bad_knob_error": "warmth must be between 0.4 and 3",
+  "over_budget_error": "Estimated 535 h exceeds the 120-hour compute cap. Maximum span for these settings is about 1122.4 model time units.",
+  "summary_bytes_per_job": 3140,
+  "pause_frame": 5,
+  "recovered_frames": 201,
+  "recovered_time": 3.9999999999999587,
+  "lifecycle": {
+    "births": 1198,
+    "deaths": 223,
+    "supernovae": 16,
+    "counts": {
+      "gas": 2,
+      "protostar": 0,
+      "main_sequence": 2767,
+      "giant": 8,
+      "white_dwarf": 207,
+      "neutron_star": 12,
+      "black_hole": 4,
+      "halo": 6999,
+      "smbh": 1
+    }
+  },
+  "planets_energy_change": 4.1733817359192625e-16,
+  "initial_frame_preserved": true,
+  "concurrent_job_rejected": true,
+  "invalid_frame_rejected": true,
+  "running_delete_rejected": true,
+  "protected_delete_rejected": true,
+  "finished_delete_ok": true,
+  "lab_page_has_no_three": true,
+  "bytes_per_particle": 24
+}

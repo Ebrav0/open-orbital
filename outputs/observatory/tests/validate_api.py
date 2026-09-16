@@ -78,6 +78,6 @@ with tempfile.TemporaryDirectory(prefix='orbital-api-') as td:
         assert api(purl,method='DELETE')['removed']==pid and not (Path(td)/pid).exists();expect(404,lambda:api(purl))
         assert len(api('/api/jobs?view=summary'))==1
         result.update(initial_frame_preserved=True,concurrent_job_rejected=True,invalid_frame_rejected=True,running_delete_rejected=True,protected_delete_rejected=True,finished_delete_ok=True,lab_page_has_no_three=True,bytes_per_particle=24)
-        (APP/'api_validation_r3.json').write_text(json.dumps(result,indent=2));print(json.dumps(result,indent=2))
+        Path(os.environ.get('OBSERVATORY_TEST_REPORT',APP/'api_validation_r3.json')).write_text(json.dumps(result,indent=2));print(json.dumps(result,indent=2))
     finally:
         if proc and proc.poll() is None:proc.terminate();proc.wait(timeout=20)
