@@ -11,7 +11,7 @@ BASE=Path(__file__).resolve().parent
 DATA=Path(os.environ.get('OBSERVATORY_DATA',BASE.parents[1]/'work/observatory-data')).resolve();DATA.mkdir(parents=True,exist_ok=True)
 PROCESSES={};LOCK=threading.Lock()
 PROTECTED={'0e45a855ba11','44c528079f88','ff56d195ce89','58ab7c268cdd'}
-WALL_CAP_HOURS=120;MAX_RUNS=12;ACTIVE=['running','initializing','queued','pausing']
+WALL_CAP_HOURS=120;MAX_RUNS=12;ACTIVE=['running','initializing','pausing']
 REFERENCE_SECONDS=157.84   # measured: 100,000 particles, 10 threads, 500 steps, model revision 2
 
 CLONE_AZIMUTH={2:0,3:120,4:240,5:180}
@@ -74,7 +74,7 @@ def annotate_pause(status,cfg,meta,control):
 def job(p,summary=False):
     cfg=read(p/'config.json',{});status=read(p/'status.json',dict(phase='queued',frames=0,progress=0));meta=read(p/'meta.json',{})
     control=read(p/'control.json',{})
-    if status['phase'] in ['running','initializing','paused','queued','pausing'] and not alive(p.name):
+    if status['phase'] in ['running','initializing','paused','pausing'] and not alive(p.name):
         status['phase']='interrupted' if (p/'checkpoint.json').exists() else 'error';status['error']='Worker stopped. Resume the saved checkpoint.' if status['phase']=='interrupted' else 'Worker stopped before its first checkpoint.'
     status=annotate_pause(status,cfg,meta,control)
     if summary:
@@ -151,13 +151,87 @@ def normalize(config):
     cfg.update(notes=notes,estimated_seconds=est,created=time.time())
     return cfg
 
-def create(config):
-    cfg=normalize(config)
-    if busy():raise ValueError('Pause the running experiment before starting another.')
+# Queue state is a single atomic document. HTTP mutations and dispatch share LOCK.
+# A queued job has no worker. Paused/interrupted current queue work blocks dispatch;
+# restart always holds the queue so no checkpoint is silently skipped.
+QUEUE_FILE=DATA/'queue.json'
+STOP_SCHEDULER=threading.Event()
+
+def queue_state():
+    return read(QUEUE_FILE,dict(enabled=False,ids=[],current=None,message='Ready to arrange experiments.'))
+
+def save_queue(q):atomic(QUEUE_FILE,q)
+
+def check_space(cfg,queued=()):
+    need=disk_bytes(cfg)+sum(disk_bytes(read(folder(jid)/'config.json',{})) for jid in queued)+2*1024**3
+    if shutil.disk_usage(DATA).free<need:raise ValueError(f'At least {need/1024**3:.1f} GiB of free disk space is required for these experiments.')
+
+def create(config,enqueue=False):
+    cfg=normalize(config);q=queue_state()
+    if not enqueue and (busy() or q['enabled']):raise ValueError('Pause the running experiment or hold the queue before starting another.')
     if len(jobs(True))>=MAX_RUNS:raise ValueError(f'{MAX_RUNS} experiments are saved. Remove a run before creating more.')
-    need=disk_bytes(cfg)+2*1024**3
-    if shutil.disk_usage(DATA).free<need:raise ValueError(f'At least {need/1024**3:.1f} GiB of free disk space is required for this run.')
-    jid=uuid.uuid4().hex[:12];p=DATA/jid;p.mkdir();atomic(p/'config.json',cfg);atomic(p/'control.json',dict(action='run'));spawn(p);return job(p)
+    check_space(cfg,q['ids'])
+    jid=uuid.uuid4().hex[:12];p=DATA/jid;p.mkdir();atomic(p/'config.json',cfg);atomic(p/'control.json',dict(action='run'))
+    atomic(p/'status.json',dict(phase='queued' if enqueue else 'initializing',frames=0,progress=0))
+    if enqueue:
+        q['ids'].append(jid);save_queue(q)
+    else:spawn(p)
+    return job(p)
+
+def dispatch_queue():
+    """Called under LOCK. Never overlap workers, including a completing worker's final I/O."""
+    q=queue_state()
+    if not q['enabled']:return
+    if q.get('current'):
+        current=job(folder(q['current']),True)
+        if alive(current['id']):return
+        if current['status']['phase']!='complete':
+            q.update(enabled=False,message='Queue held: review the stopped experiment before continuing.');save_queue(q);return
+        q['current']=None;save_queue(q)
+    # Older paused experiments are independent saved work, not queue barriers.
+    # Adopt a currently computing manual run so pausing it also holds this batch.
+    for j in jobs(True):
+        if j['status']['phase'] in ACTIVE:
+            q['current']=j['id'];save_queue(q);return
+        if alive(j['id']) and j['status']['phase'] not in ('paused','interrupted'):return
+    if not q['ids']:
+        q.update(enabled=False,message='Queue finished.');save_queue(q);return
+    jid=q['ids'][0];p=folder(jid)
+    try:check_space(read(p/'config.json',{}),q['ids'][1:])
+    except ValueError as e:
+        q.update(enabled=False,message=str(e));save_queue(q);return
+    # Commit the active slot before launch. A crash here recovers as interrupted/error,
+    # with the remaining order intact and automatic dispatch disabled on restart.
+    q['ids'].pop(0);q.update(current=jid,message='Running experiments in order.');save_queue(q)
+    atomic(p/'status.json',dict(phase='initializing',frames=0,progress=0))
+    try:spawn(p)
+    except OSError as e:
+        atomic(p/'status.json',dict(phase='error',frames=0,progress=0,error=str(e)))
+        q.update(enabled=False,message='Could not launch worker.');save_queue(q)
+
+def queue_action(data):
+    q=queue_state();action=data.get('action')
+    if action=='start':
+        if q.get('current'):
+            j=job(folder(q['current']),True)
+            if j['status']['phase'] in ('complete','error'):q['current']=None
+        q.update(enabled=True,message='Queue enabled. A paused queue run must be resumed or removed before the next starts.')
+    elif action=='hold':q.update(enabled=False,message='Queue held. The current experiment may finish; no next run will start.')
+    elif action in ('up','down'):
+        jid=data.get('id')
+        if jid not in q['ids']:raise ValueError('Only waiting experiments can be reordered.')
+        i=q['ids'].index(jid);n=i+(-1 if action=='up' else 1)
+        if not 0<=n<len(q['ids']):raise ValueError('Experiment is already at that end of the queue.')
+        q['ids'][i],q['ids'][n]=q['ids'][n],q['ids'][i]
+    else:raise ValueError('Unsupported queue action')
+    save_queue(q);return q
+
+def scheduler():
+    while not STOP_SCHEDULER.wait(.25):
+        with LOCK:
+            try:dispatch_queue()
+            except Exception as e:
+                q=queue_state();q.update(enabled=False,message=f'Queue held: {e}');save_queue(q)
 
 def remove(jid):
     if jid in PROTECTED:raise ValueError('This experiment is a preserved comparison run and cannot be removed.')
@@ -168,6 +242,10 @@ def remove(jid):
         proc.terminate()
         try:proc.wait(timeout=20)
         except subprocess.TimeoutExpired:proc.kill();proc.wait(timeout=5)
+    q=queue_state()
+    if jid in q['ids']:q['ids'].remove(jid)
+    if q.get('current')==jid:q['current']=None
+    save_queue(q)
     shutil.rmtree(p)
     return dict(ok=True,removed=jid)
 
@@ -211,6 +289,7 @@ class Handler(BaseHTTPRequestHandler):
     def do_GET(self):
         try:
             u=urlparse(self.path);parts=u.path.strip('/').split('/');qs=parse_qs(u.query)
+            if u.path=='/api/queue':return self.send(queue_state())
             if u.path=='/api/jobs':return self.send(jobs(summary=qs.get('view',[''])[0]=='summary'))
             if u.path=='/api/system':return self.send(dict(cpu='Apple M4 Pro',cores=os.cpu_count(),engine='REBOUND 5.1.1 · CPU',data_directory=str(DATA),wall_cap_hours=WALL_CAP_HOURS,max_runs=MAX_RUNS,protected=sorted(PROTECTED),reference_seconds=REFERENCE_SECONDS))
             if u.path=='/api/schema':return self.send(dict(schema={k:dict(kind=v[0],allowed=v[1]) for k,v in SCHEMA.items()},defaults=DEFAULTS,galaxy_keys=GALAXY_KEYS,planet_keys=PLANET_KEYS))
@@ -239,9 +318,12 @@ class Handler(BaseHTTPRequestHandler):
             data=json.loads(self.rfile.read(size) or '{}');parts=urlparse(self.path).path.strip('/').split('/')
             if parts==['api','preview']:return self.send(preview(data),mime='application/octet-stream')
             with LOCK:
+                if parts==['api','queue','jobs']:return self.send(create(data,enqueue=True),201)
+                if parts==['api','queue']:return self.send(queue_action(data))
                 if parts==['api','jobs']:return self.send(create(data),201)
                 if len(parts)==4 and parts[:2]==['api','jobs'] and parts[3]=='control':
                     p=folder(parts[2]);action=data.get('action');j=job(p)
+                    if j['status']['phase']=='queued':raise ValueError('Start queued experiments through the queue.')
                     if action not in ['pause','run']:raise ValueError('Unsupported control')
                     if j['status']['phase'] in ['complete','error']:raise ValueError('This experiment has finished')
                     if action=='run' and busy(p.name):raise ValueError('Pause the other running experiment first')
@@ -269,9 +351,12 @@ if __name__=='__main__':
     print(f'Observatory: http://127.0.0.1:{args.port}  (Compute page: /lab)',flush=True)
     def stop(*_):raise KeyboardInterrupt
     signal.signal(signal.SIGTERM,stop)
+    q=queue_state();q.update(enabled=False,message='Queue held after server startup. Review saved work, then Start queue.');save_queue(q)
+    thread=threading.Thread(target=scheduler,daemon=True);thread.start()
     try:server.serve_forever()
     except KeyboardInterrupt:pass
     finally:
+        STOP_SCHEDULER.set();thread.join(timeout=5)
         for p in PROCESSES.values():
             if p.poll() is None:p.terminate()
         for p in PROCESSES.values():

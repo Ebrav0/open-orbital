@@ -15,3 +15,8 @@
 .stage-legend{display:flex;flex-wrap:wrap;gap:6px 12px;margin-top:12px;font-size:9px;color:#9daab6}.stage-legend span::before{content:'';display:inline-block;width:7px;height:7px;border-radius:50%;margin-right:5px;background:var(--c)}
 @media(max-width:1100px){.lab-body{overflow:auto}.lab-workspace{display:flex;flex-direction:column;height:auto}.lab-setup{border-right:0;border-bottom:1px solid var(--line)}.lab-setup,.lab-status{overflow:visible}}
 @media(max-width:700px){.page-tabs{order:2;margin:0}.lab-setup,.lab-status{padding:20px 16px 32px}.slider-row{grid-template-columns:1fr 80px}.status-head .status-pill{margin-top:20px}}
+
+/* Queue order stays readable on narrow screens; controls wrap instead of overflowing. */
+.queue-panel{border:1px solid #344353;border-radius:12px;padding:16px;margin:18px 0}.queue-actions{display:flex;gap:8px;flex-wrap:wrap}#queue-list{padding-left:24px}#queue-list li{padding:10px 0;overflow-wrap:anywhere}#queue-list li span{display:block;margin-bottom:8px}#queue-list button{margin:2px 6px 2px 0}
+/* Keep the queue readable while scrolling; a sticky action card covered its controls. */
+.lab-actions{position:static}

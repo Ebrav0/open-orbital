@@ -12,10 +12,12 @@
 <div class="status-head"><div><div class="section-label">COMPUTATION STATUS</div><h2 id="status-heading">Nothing selected</h2><p id="status-sub" class="lead">Start a computation or pick a saved experiment.</p></div><span class="status-pill" id="phase">Idle</span></div>
 <div class="estimate" id="estimate" aria-live="polite"><div class="estimate-time" id="estimate-time">Estimating…</div><div class="estimate-detail" id="estimate-detail"></div></div>
 <button id="start-compute" class="primary">Start computation</button>
+<button id="add-queue" class="secondary">Add to queue</button>
 <button id="stop-compute" class="secondary">Stop computation</button>
 <p class="pause-eta hidden" id="pause-eta" aria-live="polite"></p>
 <p class="micro">Start always creates a new experiment from the sliders on the left. Stop asks the running integrator to pause at the next leapfrog check (about four times a second) and then write a checkpoint. Computation continues if you leave this tab. Playback of saved frames lives on the Observe page. Engine RAM is separate from this dashboard.</p>
 </div>
+<section class="queue-panel" aria-labelledby="queue-heading"><h3 id="queue-heading">Experiment queue</h3><p id="queue-message" aria-live="polite"></p><p class="micro">Add experiments from the sliders, arrange their order, then Start queue. Runs execute one at a time. Pausing the current queue run holds the queue. Keep the server running; this tab can close.</p><div class="queue-actions"><button id="start-queue" class="secondary">Start queue</button><button id="hold-queue" class="secondary">Hold queue</button></div><ol id="queue-list"></ol></section>
 <div class="progress-track"><div id="progress-bar"></div></div><div class="progress-copy"><span id="progress-label">—</span><span id="frame-label">—</span></div>
 <dl class="status-grid"><div><dt>Wall time</dt><dd id="wall-time">—</dd></div><div><dt>Computed simulation time</dt><dd id="computed-time">—</dd></div><div><dt>Last chunk</dt><dd id="last-chunk">—</dd></div><div><dt>ETA</dt><dd id="eta">—</dd></div><div><dt>Threads</dt><dd id="threads-val">—</dd></div><div><dt>Particles</dt><dd id="particles-val">—</dd></div><div><dt>Model revision</dt><dd id="revision-val">—</dd></div><div><dt>Experiment id</dt><dd id="job-id" class="mono">—</dd></div><div><dt>Leapfrog steps</dt><dd id="steps-val">—</dd></div><div><dt>Engine RAM (estimate)</dt><dd id="engine-ram">—</dd></div></dl>
 <div class="section-label">DIAGNOSTICS</div><dl class="diagnostics" id="diagnostics"></dl>
