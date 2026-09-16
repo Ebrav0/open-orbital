@@ -121,6 +121,7 @@ def step(sim,b,params,dt_model,seed):
     # ---- aging ----
     alive=(types>=PROTO)&(types<=GIANT)
     age[alive]+=dt_myr
+    tms=lifetime_myr(np.where(alive,m_star,1.))
     # protostar -> MS
     grow=np.flatnonzero(types==PROTO)
     if len(grow) and len(gas_idx) and float(params['grow_rate'])>0:
@@ -135,12 +136,9 @@ def step(sim,b,params,dt_model,seed):
     done=grow[age[grow]>=prems_myr(m_star[grow])] if len(grow) else grow
     types[done]=MS
     # MS -> giant
-    ms_idx=np.flatnonzero(types==MS)
-    if len(ms_idx):
-        tms=lifetime_myr(m_star[ms_idx]);types[ms_idx[age[ms_idx]>=.9*tms]]=GIANT
+    ms_idx=np.flatnonzero(types==MS);to_giant=ms_idx[age[ms_idx]>=.9*tms[ms_idx]];types[to_giant]=GIANT
     # giant -> remnant
-    giants=np.flatnonzero(types==GIANT)
-    dying=giants[age[giants]>=lifetime_myr(m_star[giants])] if len(giants) else giants
+    giants=np.flatnonzero(types==GIANT);dying=giants[age[giants]>=tms[giants]]
     kick_kms=float(params['sn_kick_kms'])
     if len(dying):
         rtype,rmass=remnant_of(m_star[dying]);frac=np.clip(rmass/np.maximum(m_star[dying],1e-6),0,1)

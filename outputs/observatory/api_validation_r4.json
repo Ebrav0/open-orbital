@@ -1,0 +1,37 @@
+{
+  "bad_knob_error": "warmth must be between 0.4 and 3",
+  "over_budget_error": "Estimated 561 h exceeds the 120-hour compute cap. Maximum span for these settings is about 1069.0 model time units.",
+  "n_galaxies_6_error": "n_galaxies must be one of [1, 2, 3, 4, 5]",
+  "five_galaxy_10000_ok": true,
+  "summary_bytes_per_job": 5458,
+  "pause_frame": 3,
+  "recovered_frames": 201,
+  "recovered_time": 3.9999999999999587,
+  "lifecycle": {
+    "births": 1198,
+    "deaths": 205,
+    "supernovae": 24,
+    "counts": {
+      "gas": 2,
+      "protostar": 0,
+      "main_sequence": 2780,
+      "giant": 13,
+      "white_dwarf": 181,
+      "neutron_star": 18,
+      "black_hole": 6,
+      "halo": 6998,
+      "smbh": 2
+    }
+  },
+  "isolated_n_galaxies_1_ok": true,
+  "planets_energy_change": 2.7822544906128414e-16,
+  "initial_frame_preserved": true,
+  "concurrent_job_rejected": true,
+  "invalid_frame_rejected": true,
+  "running_delete_rejected": true,
+  "protected_delete_rejected": true,
+  "finished_delete_ok": true,
+  "lab_page_has_no_three": true,
+  "bytes_per_particle": 24,
+  "model_revision": 4
+}

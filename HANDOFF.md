@@ -10,16 +10,18 @@ Implemented 2–5 live N-body galaxies on the existing CPU tree. Isolated `n_gal
 
 **Observe.** Color mode Galaxy from `meta.galaxies` index ranges (no extra frame bytes). Camera uses `meta.camera_distance` when present. Sidebar shows `N galaxies · …` for encounters.
 
-**Tests (run after this ship; write r4 JSON only).**
+**Tests (measured in this cloud workspace).** `work/venv/bin/python` (pip rebound 5.1.1, no OpenMP tree). Historical `validation.json` / `validation_r3.json` / `api_validation.json` / `api_validation_r3.json` mtimes unchanged.
+
 ```
 work/venv/bin/python outputs/observatory/tests/validate_physics.py
 work/venv/bin/python outputs/observatory/tests/validate_api.py
 ```
-API test uses isolated port 8767. Do not overwrite `validation.json`, `validation_r3.json`, `api_validation.json`, `api_validation_r3.json`, or the four protected runs.
 
-**Outstanding / honest limits.** Superparticles, collisionless, no SPH/ram pressure, no FoF remapping. Default 245 Myr is a first passage, not MW–M31. Barnes–Hut with several dense concentrations is coarser than an isolated galaxy. Birth-galaxy colors stay frozen. This cloud workspace has no archived `44c528079f88/model_source.py`; isolated bit-match is against `origin/main` revision-3 `physics.py` when git is available.
+- Physics → `outputs/observatory/validation_r4.json` (61 s): isolated vs `n_galaxies=1` max |Δstate| = 0; vs `origin/main` revision-3 `physics.py` max |Δstate| = 0 (archived `44c528079f88/model_source.py` is not in this workspace). Lifecycle-off 2048 energy change 4.40e-5 at dt 0.02 / θ 0.4 and 5.69e-6 at dt 0.01 (same bounds as r3). Two-galaxy head-on N=2048: slices 1024+1024, separation 19.79 → 16.44 after 80 steps, finite. Five galaxies N=4096: slices 820+819×4, finite. Retrograde g2_spin=-1: L_z(A)=+2.06, L_z(B)=-4.57. Two-galaxy lifecycle 200 steps: mass drift 1.7e-16, disk_mask length N, halo types unchanged. Isolated lifecycle speed 40 / 500 steps: mass drift 0.0, 307 births; deaths/SN 60/5 on this serial tree (r3 JSON recorded 61/3 on the Mac OpenMP build — same stellar.py on this IC stream matches 60/5).
+- API → `outputs/observatory/api_validation_r4.json` (40 s, port 8767, temp dir): `n_galaxies=6` → 400; `n=10000` `n_galaxies=5` OK; 2-galaxy POST: `meta.n_galaxies==2`, `model_revision==4`, 24-byte frames, two SMBHs, baryon mass 2.4, pause/restart first frame identical, summary 5,458 bytes with `galaxies` kept; isolated `n_galaxies=1` OK; `/lab` has Start+Stop and no Three.js; protected DELETE 400.
+- Browser (embedded Chromium): Compute shows Encounter + Galaxy 2–5 with no disclosure; Galaxy 3–5 unused rows dim with “not used unless galaxy count ≥ i”; estimate names 2 galaxies and first passage ~245 Myr; Start/Stop on the right; 700 px columns stack. JS heap 1.8 MB; zero `/frames` requests from Compute. Observe Galaxy color mode shows a 5-swatch legend and two birth-colored clumps. No JS errors.
 
-**Server.** No job was left running on :8766 in this cloud environment. Start with `sh outputs/observatory/run.sh` if needed. Tests use 8767.
+**Server.** Port 8766 is serving this revision-4 code with disposable job `d81656302d72` **complete** (10,000 particles, 2 galaxies, 201 frames, lifecycle off) under `work/observatory-data` (gitignored). Ctrl+C is a graceful shutdown. Tests used 8767.
 
 ## Local Git setup (2026-09-16)
 
