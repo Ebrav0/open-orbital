@@ -1,5 +1,26 @@
 # Agent handoff — Open Orbital
 
+## Galaxy collision lab — model revision 4 (2026-09-16)
+
+Implemented 2–5 live N-body galaxies on the existing CPU tree. Isolated `n_galaxies=1` uses the revision-3 disk+halo DF (generator stamped 4). Galaxy A keeps the full knobs; galaxies 2–5 are compact clones. Default **new** Compute/HTTP job is `n_galaxies=2`; `galaxy()` / `GALAXY_DEFAULTS` still default to 1 so omitted keys replay as isolated. Frames stay 24-byte `xyzsmt`. Compute tab still has no Three.js. No canned merger path.
+
+**Physics.** `build_one_galaxy` + `place_galaxy` + mass-weighted N split (min 256/galaxy, remainder on A). Encounter geometry: spin → disk tilt about x → COM at `(sep, impact, 0)` with bulk `(-vrel, 0, 0)` → `R = Rz(azimuth) @ Ry(inclination)`. Tree `root_size=2048` only when `n_galaxies>1`. One `move_to_com()` after assemble. `stellar.py` uses `disk_mask` (contiguous per-galaxy disk slices); old baryon npz without the array infers a disk prefix.
+
+**Compute / API.** Encounter + Galaxy 2–5 groups always visible; unused clone rows get class `unused`. Estimator ×1.05 if `n_galaxies>1` (prediction). `n_galaxies=6` is 400. Draft key `orbital-lab-draft-v2`. Notes provenance: `From Cursor, Grok 4.6: galaxy encounter lab (revision 4)`.
+
+**Observe.** Color mode Galaxy from `meta.galaxies` index ranges (no extra frame bytes). Camera uses `meta.camera_distance` when present. Sidebar shows `N galaxies · …` for encounters.
+
+**Tests (run after this ship; write r4 JSON only).**
+```
+work/venv/bin/python outputs/observatory/tests/validate_physics.py
+work/venv/bin/python outputs/observatory/tests/validate_api.py
+```
+API test uses isolated port 8767. Do not overwrite `validation.json`, `validation_r3.json`, `api_validation.json`, `api_validation_r3.json`, or the four protected runs.
+
+**Outstanding / honest limits.** Superparticles, collisionless, no SPH/ram pressure, no FoF remapping. Default 245 Myr is a first passage, not MW–M31. Barnes–Hut with several dense concentrations is coarser than an isolated galaxy. Birth-galaxy colors stay frozen. This cloud workspace has no archived `44c528079f88/model_source.py`; isolated bit-match is against `origin/main` revision-3 `physics.py` when git is available.
+
+**Server.** No job was left running on :8766 in this cloud environment. Start with `sh outputs/observatory/run.sh` if needed. Tests use 8767.
+
 ## Local Git setup (2026-09-16)
 
 Initialized a local repository on `main` and captured the current revision-3 project as the initial baseline. Earlier agent edit history is unavailable; archived run sources and historical benchmark files remain the older evidence. No remote was created. Source, documentation, helper scripts, bundled assets, and benchmark evidence are tracked; installed runtimes, live experiment data, logs, caches, and local environment secrets are ignored and remain on disk. See `outputs/GIT_GUIDE.md` for handoff and recovery commands.
@@ -11,7 +32,7 @@ Validation: inspected the staged file list, checked ignored runtime/data paths w
 Created the private repository https://github.com/Ebrav0/open-orbital and connected it as `origin`. Push commits to share changes across agents and computers; saving a file alone does not sync it. Live simulation data and installed runtimes remain ignored. No simulation code or running process changed.
 
 ## Current state
-A functioning local observatory with a Python HTTP server, CPU REBOUND workers and a Three.js browser viewer. Both requested modes are implemented and tested. The latest galaxy is **model revision 3** (parameterized structure + optional stellar lifecycle); revision 2 remains the comparison run. There are four protected saved experiments (`0e45a855ba11` revision-1 galaxy, `44c528079f88` revision-2 galaxy, `ff56d195ce89` original Solar System, `58ab7c268cdd` 3× Jupiter) plus one revision-3 example (`ce051010c143`, 10,000 particles, lifecycle speed 40, central black hole — created from the Compute page during UI verification; removable). No simulation should need to run merely to view them.
+A functioning local observatory with a Python HTTP server, CPU REBOUND workers and a Three.js browser viewer. Both requested modes are implemented and tested. The latest galaxy is **model revision 4** (1–5 live N-body galaxies; isolated `n_galaxies=1` still matches revision 3). Revision 3 remains the parameterized isolated lab; revision 2 remains the comparison run. There are four protected saved experiments (`0e45a855ba11` revision-1 galaxy, `44c528079f88` revision-2 galaxy, `ff56d195ce89` original Solar System, `58ab7c268cdd` 3× Jupiter) plus one revision-3 example (`ce051010c143`, 10,000 particles, lifecycle speed 40, central black hole — created from the Compute page during UI verification; removable). No simulation should need to run merely to view them.
 
 **Server state (2026-09-15 ~22:43 local).** Port 8766 is running (`run.sh` PID 553). The 200,000-particle run `cee19b92a783` was resumed from checkpoint frame 11 and is **running** (worker PID 794, 14 threads). Measured after resume: frame 12 saved at 5.06 model time / ~124 Myr, ~48 s for that chunk. Remaining **prediction** from that rate: ~226 frames × ~48–54 s ≈ 3.0–3.4 h wall (the pre-start estimator of ~1.66 h total is faster than this measured 200k+lifecycle pace). Do not treat that as a calibrated ETA. Ctrl+C on the server terminal is a graceful shutdown and would interrupt this job again.
 
@@ -71,7 +92,7 @@ Plan: `~/.cursor/plans/galaxy_parameter_lab_1093fc9f.plan.md` (not edited). Ever
 - `outputs/observatory/run.sh`: derives the project root from its own location; uses the existing Python environment and native library.
 - `outputs/observatory/start.sh`: terminal launcher used by `Start OpenOrbital`; reuses a healthy :8766 server, otherwise starts `run.sh` and opens the Compute dashboard.
 - `outputs/observatory/tests/`: numerical checks and an isolated server-restart test.
-- `outputs/observatory/validation.json`, `api_validation.json`, `test_instance_results.json`: revision-2 recorded evidence, not configuration. `validation_r3.json`, `api_validation_r3.json`: revision-3 evidence. Tests write only the `_r3` files.
+- `outputs/observatory/validation.json`, `api_validation.json`, `test_instance_results.json`: revision-2 recorded evidence, not configuration. `validation_r3.json`, `api_validation_r3.json`: revision-3 evidence. `validation_r4.json`, `api_validation_r4.json`: revision-4 evidence. Tests write only the `_r4` files.
 - `outputs/`: earlier benchmark source, figures and raw results. Keep them as provenance.
 - `work/observatory-data/<id>/`: saved experiments. `config.json` is the input, `meta.json` describes units/times/components, `status.json` is worker progress. `model_source.py` archives the generator for new runs.
 
@@ -117,4 +138,4 @@ All files were moved from the Codex task directory into this folder. Compatibili
 The Python executable ultimately depends on this Mac's Homebrew installation, and the native OpenMP build links to `/opt/homebrew/opt/libomp/lib/libomp.dylib`. For another machine, create a new venv and install outputs/observatory/requirements.txt; rebuild REBOUND for that platform rather than copying its binary. `outputs/build_openmp.sh` records this Mac's compiler/SDK flags. It also runs benchmarks when invoked, so inspect it before reuse. macOS 26.5 SDK was selected to avoid a local SDK 27 linker mismatch.
 
 ## Sensible next work, not yet implemented
-Improve disk equilibrium over multiple orbital periods; add a validated second-galaxy encounter (two–five galaxies); SPH or a feedback-energy model; isochrone-based stages; inspector comparison charts across runs; a worker RAM hard cap; measure the 120 h estimator at 200k and with lifecycle on. First preserve the working two-page, two-mode observatory. Do not imply those future features already exist.
+Improve disk equilibrium over multiple orbital periods; SPH or a feedback-energy model; isochrone-based stages; inspector comparison charts across runs; a worker RAM hard cap; measure the 120 h estimator at 200k, with lifecycle on, and with `n_galaxies>1`. Do not imply those future features already exist.

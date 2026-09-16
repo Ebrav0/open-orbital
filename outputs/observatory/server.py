@@ -14,16 +14,27 @@ PROTECTED={'0e45a855ba11','44c528079f88','ff56d195ce89','58ab7c268cdd'}
 WALL_CAP_HOURS=120;MAX_RUNS=12;ACTIVE=['running','initializing','queued','pausing']
 REFERENCE_SECONDS=157.84   # measured: 100,000 particles, 10 threads, 500 steps, model revision 2
 
+CLONE_AZIMUTH={2:0,3:120,4:240,5:180}
 # id -> (kind, allowed) where kind is 'choice', 'float', 'int', 'bool', 'list8'
 SCHEMA=dict(
     n=('choice',[10000,30000,100000,200000]),threads=('choice',[1,4,8,10,14]),seed=('int',(0,2**32-1)),
+    n_galaxies=('choice',[1,2,3,4,5]),
     disk_mass=('float',(.2,5)),halo_mass=('float',(2,80)),disk_fraction=('float',(.15,.45)),disk_scale=('float',(.5,3)),disk_thickness=('float',(.03,.25)),halo_scale=('float',(1.5,10)),warmth=('float',(.4,3)),smbh_mass=('float',(0,.1)),
     lifecycle_enabled=('bool',None),gas_fraction=('float',(0,.8)),t_sf=('float',(.1,20)),lifecycle_speed=('float',(1,80)),sf_density_bias=('float',(0,1)),imf_mmin=('float',(.05,1)),imf_mmax=('float',(20,150)),grow_rate=('float',(0,1)),sn_kick_kms=('float',(0,200)),
     theta=('float',(.25,.7)),softening=('float',(.03,.15)),dt=('float',(.01,.04)),
     jupiter_mass=('choice',[1,3,10]),planet_mass_scale=('list8',(.25,10)),perturber_mass=('float',(0,.01)),perturber_a=('float',(.5,40)))
-GALAXY_KEYS=['n','threads','seed','disk_mass','halo_mass','disk_fraction','disk_scale','disk_thickness','halo_scale','warmth','smbh_mass','lifecycle_enabled','gas_fraction','t_sf','lifecycle_speed','sf_density_bias','imf_mmin','imf_mmax','grow_rate','sn_kick_kms','theta','softening','dt']
+for _i in range(2,6):
+    SCHEMA[f'g{_i}_mass_ratio']=('float',(.1,3));SCHEMA[f'g{_i}_size_ratio']=('float',(.3,2))
+    SCHEMA[f'g{_i}_sep']=('float',(8,80));SCHEMA[f'g{_i}_impact']=('float',(0,20));SCHEMA[f'g{_i}_vrel']=('float',(.4,4))
+    SCHEMA[f'g{_i}_azimuth']=('float',(0,360));SCHEMA[f'g{_i}_inclination']=('float',(0,180));SCHEMA[f'g{_i}_disk_tilt']=('float',(0,180))
+    SCHEMA[f'g{_i}_spin']=('choice',[1,-1])
+_CLONE_KEYS=[k for i in range(2,6) for k in (f'g{i}_mass_ratio',f'g{i}_size_ratio',f'g{i}_sep',f'g{i}_impact',f'g{i}_vrel',f'g{i}_azimuth',f'g{i}_inclination',f'g{i}_disk_tilt',f'g{i}_spin')]
+GALAXY_KEYS=['n','threads','seed','n_galaxies']+_CLONE_KEYS+['disk_mass','halo_mass','disk_fraction','disk_scale','disk_thickness','halo_scale','warmth','smbh_mass','lifecycle_enabled','gas_fraction','t_sf','lifecycle_speed','sf_density_bias','imf_mmin','imf_mmax','grow_rate','sn_kick_kms','theta','softening','dt']
 PLANET_KEYS=['seed','jupiter_mass','planet_mass_scale','perturber_mass','perturber_a']
-DEFAULTS=dict(n=100000,threads=8,seed=731,disk_mass=1,halo_mass=20,disk_fraction=.3,disk_scale=1.2,disk_thickness=.08,halo_scale=4,warmth=1,smbh_mass=0,lifecycle_enabled=True,gas_fraction=.2,t_sf=2,lifecycle_speed=1,sf_density_bias=.7,imf_mmin=.08,imf_mmax=100,grow_rate=.2,sn_kick_kms=0,theta=.4,softening=.06,dt=.02,jupiter_mass=1,planet_mass_scale=[1]*8,perturber_mass=0,perturber_a=2.5)
+DEFAULTS=dict(n=100000,threads=8,seed=731,n_galaxies=2,disk_mass=1,halo_mass=20,disk_fraction=.3,disk_scale=1.2,disk_thickness=.08,halo_scale=4,warmth=1,smbh_mass=0,lifecycle_enabled=True,gas_fraction=.2,t_sf=2,lifecycle_speed=1,sf_density_bias=.7,imf_mmin=.08,imf_mmax=100,grow_rate=.2,sn_kick_kms=0,theta=.4,softening=.06,dt=.02,jupiter_mass=1,planet_mass_scale=[1]*8,perturber_mass=0,perturber_a=2.5)
+for _i in range(2,6):
+    DEFAULTS[f'g{_i}_mass_ratio']=1;DEFAULTS[f'g{_i}_size_ratio']=1;DEFAULTS[f'g{_i}_sep']=20;DEFAULTS[f'g{_i}_impact']=4;DEFAULTS[f'g{_i}_vrel']=2
+    DEFAULTS[f'g{_i}_azimuth']=CLONE_AZIMUTH[_i];DEFAULTS[f'g{_i}_inclination']=0;DEFAULTS[f'g{_i}_disk_tilt']=0;DEFAULTS[f'g{_i}_spin']=1
 
 class NotFound(ValueError):pass
 
@@ -107,7 +118,8 @@ def estimate_seconds(cfg):
         bodies=10 if cfg.get('perturber_mass',0)>0 else 9
         return .25*cfg['duration']/12*(bodies/9)**2
     n=cfg['n'];steps=cfg['duration']/cfg['dt']
-    return REFERENCE_SECONDS*(n/1e5)*math.log(n)/math.log(1e5)*(steps/500)*(10/cfg['threads'])*(1.15 if cfg.get('lifecycle_enabled') else 1)
+    extra=1.05 if int(cfg.get('n_galaxies') or 1)>1 else 1
+    return REFERENCE_SECONDS*(n/1e5)*math.log(n)/math.log(1e5)*(steps/500)*(10/cfg['threads'])*(1.15 if cfg.get('lifecycle_enabled') else 1)*extra
 
 def max_duration(cfg):
     trial=dict(cfg,duration=1.);per_unit=estimate_seconds(trial)
@@ -128,6 +140,8 @@ def normalize(config):
     if mode=='planets':
         cfg.update(n=10 if cfg['perturber_mass']>0 else 9,threads=1)
         if not 1<=duration<=50:raise ValueError('Planetary span must be between 1 and 50 years')
+    elif cfg['n']<256*int(cfg.get('n_galaxies') or 1):
+        raise ValueError('Need at least 256 particles per galaxy (raise N or lower galaxy count).')
     cfg['duration']=duration
     est=estimate_seconds(cfg)
     if est>WALL_CAP_HOURS*3600:
@@ -162,7 +176,16 @@ def preview(config):
     cfg=normalize(dict(config,n=10000,threads=1,duration=1));cfg['n']=8000
     code='import sys,json,numpy as np;from physics import galaxy,planets,arrays;import stellar\ncfg=json.load(sys.stdin)\n' \
          's,meta,b=galaxy(**{k:v for k,v in cfg.items() if k in %r}) if cfg["mode"]=="galaxy" else planets(cfg.get("jupiter_mass",1),cfg.get("planet_mass_scale"),cfg.get("perturber_mass",0),cfg.get("perturber_a",2.5))\n' \
-         'q,m=arrays(s);t=(b["type"] if b is not None else np.where(np.arange(s.N)<meta.get("disk_count",s.N),2,7)).astype(np.float32)\n' \
+         'q,m=arrays(s)\n' \
+         'if b is not None: t=b["type"]\n' \
+         'else:\n' \
+         ' t=np.full(s.N,7,np.float32);gals=meta.get("galaxies") or []\n' \
+         ' if gals:\n' \
+         '  for gal in gals:\n' \
+         '   t[gal["start"]:gal["start"]+gal["disk_count"]]=2\n' \
+         '   if gal.get("smbh_count"): t[gal["start"]+gal["n"]-1]=8\n' \
+         ' else: t[:meta.get("disk_count",s.N)]=2\n' \
+         't=t.astype(np.float32)\n' \
          'sys.stdout.buffer.write(np.column_stack((q[:,:3],np.linalg.norm(q[:,3:],axis=1),m,t)).astype("<f4").tobytes())'%GALAXY_KEYS
     r=subprocess.run([sys.executable,'-c',code],input=json.dumps(cfg).encode(),capture_output=True,timeout=5,cwd=BASE,env=dict(os.environ,OMP_NUM_THREADS='1'))
     if r.returncode!=0:raise ValueError('Preview failed: '+r.stderr.decode(errors='replace')[-300:])
