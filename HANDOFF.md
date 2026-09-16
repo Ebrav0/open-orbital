@@ -43,6 +43,26 @@ Validation: existing `validate_api.py` passed with `OBSERVATORY_TEST_REPORT="$PW
 
 Production server restarted gracefully only after active run ef1911feb4ff completed (168 frames). Saved checkpoint jobs were preserved; 60f9f09c5698 becomes interrupted after the normal server shutdown, available to resume. No production experiments were queued or deleted. Queue starts empty and held. A later live check showed a newly created production run f747e062e82e computing (31 frames); this agent did not create or alter that run. Ten experiments are now saved, leaving two queue slots under the existing cap. Remaining limitations: server must remain running; restart requires explicit continuation; queue does not bypass the 12-run cap or add a RAM cap. Test run data is isolated under ignored work/queue-ui-data.
 
+## Merge queue + collision lab (2026-09-16)
+
+Fetched `origin/main` (`8e3f6a5`, persistent sequential queue) into `cursor/galaxy-collision-lab-428d`. GitHub reported `CONFLICTING` only in two files. Both hunks were simple keep-both resolutions; there was no conflicting product intent.
+
+**Resolved.** [`outputs/observatory/static/lab.js`](outputs/observatory/static/lab.js): draft key `orbital-lab-draft-v2`, `ACTIVE=['running','initializing','pausing']` (waiting `queued` jobs are not a live worker), `let queue={enabled:false,ids:[]}`, notes provenance kept. [`outputs/observatory/tests/validate_api.py`](outputs/observatory/tests/validate_api.py): r4 coverage plus `Path(os.environ.get('OBSERVATORY_TEST_REPORT',APP/'api_validation_r4.json'))`. Auto-merged without markers: `server.py` (r4 SCHEMA + queue scheduler; `ACTIVE` omits `queued`), `lab.html` (Encounter honesty + Add to queue / queue panel), `style.css` (`.slider-row.unused` + `.queue-panel`), HANDOFF/README (both sections). Incoming from main: `validate_queue.py`, queue evidence JSON/screenshots, `.gitignore` `work/queue-ui-data/`.
+
+**Tests (measured after the merge commit).** Isolated port 8767, `PYTHONPATH="$PWD/work/openmp"` `work/venv/bin/python`. Physics tests were not re-run (ICs / `physics.py` / `stellar.py` / `worker.py` unchanged by the merge). Historical `validation.json` / `validation_r3.json` / `api_validation.json` / `api_validation_r3.json` mtimes unchanged.
+
+```
+PYTHONPATH="$PWD/work/openmp" work/venv/bin/python outputs/observatory/tests/validate_api.py
+PYTHONPATH="$PWD/work/openmp" work/venv/bin/python outputs/observatory/tests/validate_queue.py
+```
+
+- API → `outputs/observatory/api_validation_r4.json` (40 s): `n_galaxies=6` → 400; five-galaxy N=10k OK; 2-galaxy pause/restart first frame identical; isolated `n_galaxies=1` OK; `/lab` Start+Stop and no Three.js; over-budget omitted-`n_galaxies` uses default 2 (×1.05): "Estimated 561 h … max span … 1069.0 model time units."; planets energy 2.78e-16; `model_revision` 4; 24-byte frames.
+- Queue → `outputs/observatory/queue_validation.json` (25 s): all nine assertions true (order persisted, reorder, restart hold, pause blocks next, hold lets current finish, sequential completion, queued removal, error holds queue, explicit continue). Galaxy enqueue without `n_galaxies` takes Compute default 2.
+
+**Browser (embedded Chromium on :8766 after restart).** Compute: Encounter Live galaxies default 2; Galaxy 2–5 groups always visible; 3–5 unused copy when count is 2; toggling count 2→1→2 dimmed Galaxy 2 then restored it; estimate names 2 galaxies and first passage ~245 Myr; Start / Add to queue / Stop + queue panel; queue message "Held. Queue held after server startup…"; 700 px columns stack, no horizontal overflow covering queue controls. Console: no errors. Network: no `/frames`, no `three.module`. Did not Start computation or Start queue.
+
+**Server.** Pre-merge :8766 had only disposable `d81656302d72` **complete**; SIGINT then restarted onto this merge with `OBSERVATORY_DATA=/workspace/work/observatory-data`. `/api/queue` is present, empty, held. No experiments were queued or deleted. Ctrl+C is a graceful shutdown. Older notes below about `cee19b92a783` running on PID 553 are historical.
+
 ## Current state
 A functioning local observatory with a Python HTTP server, CPU REBOUND workers and a Three.js browser viewer. Both requested modes are implemented and tested. The latest galaxy is **model revision 4** (1–5 live N-body galaxies; isolated `n_galaxies=1` still matches revision 3). Revision 3 remains the parameterized isolated lab; revision 2 remains the comparison run. There are four protected saved experiments (`0e45a855ba11` revision-1 galaxy, `44c528079f88` revision-2 galaxy, `ff56d195ce89` original Solar System, `58ab7c268cdd` 3× Jupiter) plus one revision-3 example (`ce051010c143`, 10,000 particles, lifecycle speed 40, central black hole — created from the Compute page during UI verification; removable). No simulation should need to run merely to view them.
 
