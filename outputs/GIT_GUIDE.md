@@ -1,7 +1,7 @@
 # Git and agent workflow
 
 The repository root is `/Users/emmanuelbravo/Desktop/Open Orbital`.
-Git records source snapshots locally. The first commit captures revision 3 as it exists now; it cannot reconstruct earlier agents’ edit history. No remote repository is configured.
+Git records source snapshots locally. The first commit captures revision 3 as it exists now; it cannot reconstruct earlier agents’ edit history. The private GitHub remote is `https://github.com/Ebrav0/open-orbital` (named `origin`).
 
 ## What is tracked
 
@@ -45,4 +45,4 @@ git diff HEAD -- outputs/observatory/worker.py
 
 ## Cursor and remote backup
 
-Open the repository root in Cursor; its Source Control panel uses this same local history. A GitHub remote is optional and has not been created. Local commits protect against code-edit mistakes, but a separate backup or remote is needed for disk-loss protection.
+Open the repository root in Cursor; its Source Control panel uses this same local history. The private GitHub repository is https://github.com/Ebrav0/open-orbital. Commit completed changes, then run `git push` to upload them. Changes are not uploaded automatically when you save a file. Before starting work on another computer, use `git pull --ff-only` from a clean working tree; if it fails, inspect the divergence rather than resetting work. Only committed, tracked files are backed up on GitHub; simulation data and runtimes still need separate backups.

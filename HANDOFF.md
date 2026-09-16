@@ -6,6 +6,10 @@ Initialized a local repository on `main` and captured the current revision-3 pro
 
 Validation: inspected the staged file list, checked ignored runtime/data paths with `git check-ignore`, checked staged whitespace (one pre-existing indentation warning in bundled `three.core.js`, left unchanged; project-owned files passed), and verified the initial commit and clean working tree. No application code changed or numerical tests ran. The server was not restarted and no simulation controls were sent. The preceding read-only review found `cee19b92a783` paused at 36 frames; older running-state notes below are historical.
 
+## Private GitHub remote (2026-09-16)
+
+Created the private repository https://github.com/Ebrav0/open-orbital and connected it as `origin`. Push commits to share changes across agents and computers; saving a file alone does not sync it. Live simulation data and installed runtimes remain ignored. No simulation code or running process changed.
+
 ## Current state
 A functioning local observatory with a Python HTTP server, CPU REBOUND workers and a Three.js browser viewer. Both requested modes are implemented and tested. The latest galaxy is **model revision 3** (parameterized structure + optional stellar lifecycle); revision 2 remains the comparison run. There are four protected saved experiments (`0e45a855ba11` revision-1 galaxy, `44c528079f88` revision-2 galaxy, `ff56d195ce89` original Solar System, `58ab7c268cdd` 3× Jupiter) plus one revision-3 example (`ce051010c143`, 10,000 particles, lifecycle speed 40, central black hole — created from the Compute page during UI verification; removable). No simulation should need to run merely to view them.
 
