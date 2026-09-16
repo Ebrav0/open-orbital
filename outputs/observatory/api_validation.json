@@ -1,0 +1,8 @@
+{
+  "pause_frame": 7,
+  "recovered_frames": 201,
+  "recovered_time": 3.9999999999999587,
+  "initial_frame_preserved": true,
+  "concurrent_job_rejected": true,
+  "invalid_frame_rejected": true
+}

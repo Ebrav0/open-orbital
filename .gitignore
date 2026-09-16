@@ -1,0 +1,18 @@
+# Installed runtimes, dependencies, and downloaded build sources
+work/venv/
+work/openmp/
+work/source/
+**/node_modules/
+
+# Live experiments: preserve on disk; back up separately from Git
+work/observatory-data/
+
+# Generated logs, browser traces, caches, and local secrets
+work/*.log
+.playwright-cli/
+**/__pycache__/
+*.py[cod]
+.DS_Store
+.env
+.env.*
+!.env.example

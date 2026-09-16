@@ -1,0 +1,34 @@
+{
+  "solar_50_year_energy_change": 0.0,
+  "earth_period_position_error": 6.21035186624874e-16,
+  "checkpoint_max_state_difference": 0.0,
+  "galaxy_2048_t10": [
+    {
+      "dt": 0.02,
+      "theta": 0.4,
+      "energy_change": 4.3953335051583053e-05,
+      "disk_radius_change": 0.10737018145239396,
+      "halo_radius_change": 0.01809614813663063,
+      "angular_change": 0.002564420322169082,
+      "finite": true
+    },
+    {
+      "dt": 0.01,
+      "theta": 0.4,
+      "energy_change": 5.694913581155703e-06,
+      "disk_radius_change": 0.10659133685835909,
+      "halo_radius_change": 0.017884710016451866,
+      "angular_change": 0.002524996000819407,
+      "finite": true
+    },
+    {
+      "dt": 0.02,
+      "theta": 0.25,
+      "energy_change": 4.624853528623074e-05,
+      "disk_radius_change": 0.1184800301769664,
+      "halo_radius_change": 0.01741490095438958,
+      "angular_change": 0.0005855259596551755,
+      "finite": true
+    }
+  ]
+}

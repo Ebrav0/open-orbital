@@ -1,0 +1,127 @@
+{
+  "threads": 8,
+  "library": "/Users/emmanuelbravo/Documents/Codex/2026-09-15/if-x20/work/openmp/librebound.cpython-314-darwin.so",
+  "rows": [
+    {
+      "n": 10000,
+      "solver": "tree",
+      "theta": 0.5,
+      "setup_s": 0.047162125003524125,
+      "cold_step_s": 0.006194582994794473,
+      "steps_per_repeat": 96,
+      "repeat_s": [
+        0.532368582993513,
+        0.5316527089744341,
+        0.5306182919885032
+      ],
+      "seconds_per_step": 0.005538049051817022,
+      "cpu_wall_ratio": 6.038363838999603,
+      "peak_process_mib": 51.15625,
+      "threads": 8
+    },
+    {
+      "n": 100000,
+      "solver": "tree",
+      "theta": 0.5,
+      "setup_s": 0.37805183298769407,
+      "cold_step_s": 0.11937337499693967,
+      "steps_per_repeat": 5,
+      "repeat_s": [
+        0.5516085830167867,
+        0.5428417920193169,
+        0.5423507500090636
+      ],
+      "seconds_per_step": 0.10856835840386339,
+      "cpu_wall_ratio": 6.132966825595865,
+      "peak_process_mib": 119.390625,
+      "threads": 8
+    },
+    {
+      "n": 300000,
+      "solver": "tree",
+      "theta": 0.5,
+      "setup_s": 1.1368819999916013,
+      "cold_step_s": 0.5054059580143075,
+      "steps_per_repeat": 1,
+      "repeat_s": [
+        0.4824586670147255,
+        0.4879067500005476,
+        0.5000118750031106
+      ],
+      "seconds_per_step": 0.4879067500005476,
+      "cpu_wall_ratio": 6.014668512637385,
+      "peak_process_mib": 272.015625,
+      "threads": 8
+    },
+    {
+      "n": 1000000,
+      "solver": "tree",
+      "theta": 0.5,
+      "setup_s": 3.77127087500412,
+      "cold_step_s": 2.242919541982701,
+      "steps_per_repeat": 1,
+      "repeat_s": [
+        2.1545788749936037,
+        2.274164375005057,
+        2.3923163750150707
+      ],
+      "seconds_per_step": 2.274164375005057,
+      "cpu_wall_ratio": 6.071115673602786,
+      "peak_process_mib": 678.9375,
+      "threads": 8
+    },
+    {
+      "n": 100000,
+      "solver": "tree",
+      "theta": 0.3,
+      "setup_s": 0.3735467910009902,
+      "cold_step_s": 0.29624112500459887,
+      "steps_per_repeat": 2,
+      "repeat_s": [
+        0.688395125005627,
+        0.6260135420016013,
+        0.6874868750164751
+      ],
+      "seconds_per_step": 0.34374343750823755,
+      "cpu_wall_ratio": 7.033930444625194,
+      "peak_process_mib": 678.9375,
+      "threads": 8
+    }
+  ],
+  "accuracy": {
+    "two_body_100_orbits_relative_energy_error": 2.220446049250313e-16,
+    "tree_force_relative_median": 0.005836065011763634,
+    "tree_force_relative_p95": 0.01919339741483861,
+    "tree_force_relative_max": 0.05938770594143197,
+    "cloud_checks": [
+      {
+        "solver": "basic",
+        "theta": 0.5,
+        "dt": 0.002,
+        "relative_energy_error": 3.0890132141081494e-07,
+        "position_rms_vs_direct_half_dt": 2.766506803236969e-07
+      },
+      {
+        "solver": "basic",
+        "theta": 0.5,
+        "dt": 0.001,
+        "relative_energy_error": 7.724235051576045e-08,
+        "position_rms_vs_direct_half_dt": 0.0
+      },
+      {
+        "solver": "tree",
+        "theta": 0.5,
+        "dt": 0.002,
+        "relative_energy_error": 0.00038222314689506653,
+        "position_rms_vs_direct_half_dt": 0.0003149033117078871
+      },
+      {
+        "solver": "tree",
+        "theta": 0.3,
+        "dt": 0.002,
+        "relative_energy_error": 6.649615464149328e-06,
+        "position_rms_vs_direct_half_dt": 4.637437971410237e-05
+      }
+    ]
+  }
+}

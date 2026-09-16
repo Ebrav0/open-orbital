@@ -1,0 +1,57 @@
+{
+  "threads": 10,
+  "library": "/Users/emmanuelbravo/Documents/Codex/2026-09-15/if-x20/work/openmp/librebound.cpython-314-darwin.so",
+  "rows": [
+    {
+      "n": 10000,
+      "solver": "tree",
+      "theta": 0.5,
+      "setup_s": 0.04789587500272319,
+      "cold_step_s": 0.005631834006635472,
+      "steps_per_repeat": 100,
+      "repeat_s": [
+        0.48248833301477134,
+        0.5116270839935169,
+        0.49460387500585057
+      ],
+      "seconds_per_step": 0.004946038750058506,
+      "cpu_wall_ratio": 7.103760297008068,
+      "peak_process_mib": 50.96875,
+      "threads": 10
+    },
+    {
+      "n": 100000,
+      "solver": "tree",
+      "theta": 0.5,
+      "setup_s": 0.37421108299167827,
+      "cold_step_s": 0.08549545798450708,
+      "steps_per_repeat": 7,
+      "repeat_s": [
+        0.6452940409944858,
+        0.628744249988813,
+        0.6282025419932324
+      ],
+      "seconds_per_step": 0.08982060714125899,
+      "cpu_wall_ratio": 7.623384352079522,
+      "peak_process_mib": 119.453125,
+      "threads": 10
+    },
+    {
+      "n": 300000,
+      "solver": "tree",
+      "theta": 0.5,
+      "setup_s": 1.1388787080068141,
+      "cold_step_s": 0.4040114590025041,
+      "steps_per_repeat": 1,
+      "repeat_s": [
+        0.4089209999947343,
+        0.4217478329956066,
+        0.3983042920008302
+      ],
+      "seconds_per_step": 0.4089209999947343,
+      "cpu_wall_ratio": 7.445114798637873,
+      "peak_process_mib": 272.015625,
+      "threads": 10
+    }
+  ]
+}

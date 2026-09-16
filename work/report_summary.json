@@ -1,0 +1,36 @@
+{
+  "best_100k": {
+    "n": 100000,
+    "solver": "tree",
+    "theta": 0.5,
+    "setup_s": 0.37421108299167827,
+    "cold_step_s": 0.08549545798450708,
+    "steps_per_repeat": 7,
+    "repeat_s": [
+      0.6452940409944858,
+      0.628744249988813,
+      0.6282025419932324
+    ],
+    "seconds_per_step": 0.08982060714125899,
+    "cpu_wall_ratio": 7.623384352079522,
+    "peak_process_mib": 119.453125,
+    "threads": 10
+  },
+  "million": {
+    "n": 1000000,
+    "solver": "tree",
+    "theta": 0.5,
+    "setup_s": 3.77127087500412,
+    "cold_step_s": 2.242919541982701,
+    "steps_per_repeat": 1,
+    "repeat_s": [
+      2.1545788749936037,
+      2.274164375005057,
+      2.3923163750150707
+    ],
+    "seconds_per_step": 2.274164375005057,
+    "cpu_wall_ratio": 6.071115673602786,
+    "peak_process_mib": 678.9375,
+    "threads": 8
+  }
+}

@@ -1,0 +1,67 @@
+{
+  "model_revision": 3,
+  "solar_50_year_energy_change": 0.0,
+  "perturbed_12_year_energy_change": 2.220446049250313e-16,
+  "earth_period_position_error": 6.21035186624874e-16,
+  "rev2_reproduction_max_state_difference": 0.0,
+  "galaxy_2048_t10_lifecycle_off": [
+    {
+      "dt": 0.02,
+      "theta": 0.4,
+      "energy_change": 4.3953335051583053e-05,
+      "disk_radius_change": 0.10737018145239396,
+      "halo_radius_change": 0.01809614813663063,
+      "angular_change": 0.002564420322169082,
+      "finite": true
+    },
+    {
+      "dt": 0.01,
+      "theta": 0.4,
+      "energy_change": 5.694913581155703e-06,
+      "disk_radius_change": 0.10659133685835909,
+      "halo_radius_change": 0.017884710016451866,
+      "angular_change": 0.002524996000819407,
+      "finite": true
+    },
+    {
+      "dt": 0.02,
+      "theta": 0.25,
+      "energy_change": 4.624853528623074e-05,
+      "disk_radius_change": 0.1184800301769664,
+      "halo_radius_change": 0.01741490095438958,
+      "angular_change": 0.0005855259596551755,
+      "finite": true
+    }
+  ],
+  "disk_speed_ratio_mass3_vs_1": 1.194135287108357,
+  "checkpoint_max_state_difference": 0.0,
+  "kroupa_sample": {
+    "min": 0.08000040790212054,
+    "max": 92.32245406552235,
+    "median": 0.2370833954698734,
+    "fraction_above_8": 0.006165
+  },
+  "lifecycle_speed40_2048": {
+    "steps": 500,
+    "wall_seconds": 1.2770416249986738,
+    "mass_drift": 0.0,
+    "baryon_mass_drift": 2.2204460492503126e-16,
+    "counts": {
+      "gas": 0,
+      "protostar": 0,
+      "main_sequence": 549,
+      "giant": 4,
+      "white_dwarf": 58,
+      "neutron_star": 1,
+      "black_hole": 2,
+      "halo": 1434,
+      "smbh": 0
+    },
+    "births": 307,
+    "deaths": 61,
+    "supernovae": 3,
+    "mass_return_failed": 0.05059509415623993,
+    "finite": true
+  },
+  "resume_rng_max_mass_difference": 0.0
+}
