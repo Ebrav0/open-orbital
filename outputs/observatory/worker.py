@@ -17,6 +17,12 @@ def static_types(meta):
     """Type column for runs without lifecycle arrays: disk=MS, halo=HALO, optional SMBH."""
     n=meta['n'];t=np.full(n,stellar.HALO,np.float32)
     if meta['mode']=='planets':t[:]=stellar.MS;return t
+    gals=meta.get('galaxies')
+    if gals:
+        for g in gals:
+            a=int(g['start']);t[a:a+int(g['disk_count'])]=stellar.MS
+            if g.get('smbh_count'):t[a+int(g['n'])-1]=stellar.SMBH
+        return t
     t[:meta['disk_count']]=stellar.MS
     if meta.get('smbh_count'):t[-1]=stellar.SMBH
     return t
@@ -124,7 +130,23 @@ def run(folder):
                 f.write(frame_bytes(s,meta,baryons,types_cache));f.flush();index+=1
                 status.update(phase='running',frames=index+1,progress=index/(len(meta['times'])-1),computed_time=float(s.t),wall_seconds=prior_wall+time.monotonic()-started-paused_time,last_frame_compute_seconds=integration,steps=int(s.steps_done))
                 if index==len(meta['times'])-1 or (config['mode']=='galaxy' and index%40==0):
-                    d=diagnostics(s,meta,baryons);d['energy_change']=abs((d['energy']-initial['energy'])/initial['energy']);d['angular_change']=float(np.linalg.norm(np.array(d['angular_momentum'])-initial['angular_momentum'])/max(np.linalg.norm(initial['angular_momentum']),1e-12));d['energy_change_uncertainty']=float(np.hypot(d.get('energy_sigma',0),initial.get('energy_sigma',0))/abs(initial['energy']));d['disk_radius_change']=d['disk_half_radius']/initial['disk_half_radius']-1;status['diagnostics']=d
+                    d=diagnostics(s,meta,baryons);d['energy_change']=abs((d['energy']-initial['energy'])/initial['energy']);d['angular_change']=float(np.linalg.norm(np.array(d['angular_momentum'])-initial['angular_momentum'])/max(np.linalg.norm(initial['angular_momentum']),1e-12));d['energy_change_uncertainty']=float(np.hypot(d.get('energy_sigma',0),initial.get('energy_sigma',0))/abs(initial['energy']));d['disk_radius_change']=d['disk_half_radius']/initial['disk_half_radius']-1
+                    enc=d.get('encounter')
+                    if enc and enc.get('min_separation') is not None:
+                        prev=(status.get('diagnostics') or {}).get('encounter') or (initial.get('encounter') or {})
+                        old=prev.get('min_separation');now=enc['min_separation']
+                        if old is not None and now<old:
+                            if now<old*.99:note(f'Closest approach so far: {now*meta.get("length_scale",3):.1f} kpc at {s.t*meta["time_scale"]:.0f} Myr.')
+                            enc['min_separation']=now;enc['min_separation_time']=float(s.t)
+                        elif old is not None:
+                            enc['min_separation']=old;enc['min_separation_time']=prev.get('min_separation_time',float(s.t))
+                        sep12=enc.get('separation_12')
+                        if sep12 is not None and not status['flags'].get('overlap_12'):
+                            gp=meta.get('params') or {}
+                            rd_a=float(gp.get('disk_scale',1.2));rd_b=rd_a*float(gp.get('g2_size_ratio',1))
+                            if sep12<2*(rd_a+rd_b):
+                                status['flags']['overlap_12']=True;note('Galaxies 1 and 2 overlapping (separation < 2 × (Rd_A + Rd_B)).')
+                    status['diagnostics']=d
                     lc=d.get('lifecycle')
                     if lc:
                         if lc['supernovae_cumulative']>0 and not status['flags'].get('first_sn'):status['flags']['first_sn']=True;note(f'First supernova at {s.t*meta["time_scale"]:.0f} Myr.')

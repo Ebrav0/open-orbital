@@ -1,5 +1,30 @@
 # Agent handoff — Open Orbital
 
+## Galaxy collision lab — model revision 4 (2026-09-16)
+
+Implemented 2–5 live N-body galaxies on the existing CPU tree. Isolated `n_galaxies=1` uses the revision-3 disk+halo DF (generator stamped 4). Galaxy A keeps the full knobs; galaxies 2–5 are compact clones. Default **new** Compute/HTTP job is `n_galaxies=2`; `galaxy()` / `GALAXY_DEFAULTS` still default to 1 so omitted keys replay as isolated. Frames stay 24-byte `xyzsmt`. Compute tab still has no Three.js. No canned merger path.
+
+**Physics.** `build_one_galaxy` + `place_galaxy` + mass-weighted N split (min 256/galaxy, remainder on A). Encounter geometry: spin → disk tilt about x → COM at `(sep, impact, 0)` with bulk `(-vrel, 0, 0)` → `R = Rz(azimuth) @ Ry(inclination)`. Tree `root_size=2048` only when `n_galaxies>1`. One `move_to_com()` after assemble. `stellar.py` uses `disk_mask` (contiguous per-galaxy disk slices); old baryon npz without the array infers a disk prefix.
+
+**Compute / API.** Encounter + Galaxy 2–5 groups always visible; unused clone rows get class `unused`. Estimator ×1.05 if `n_galaxies>1` (prediction). `n_galaxies=6` is 400. Draft key `orbital-lab-draft-v2`. Notes provenance: `From Cursor, Grok 4.6: galaxy encounter lab (revision 4)`.
+
+**Observe.** Color mode Galaxy from `meta.galaxies` index ranges (no extra frame bytes). Camera uses `meta.camera_distance` when present. Sidebar shows `N galaxies · …` for encounters.
+
+**Tests (measured in this cloud workspace).** `work/venv/bin/python` (pip rebound 5.1.1, no OpenMP tree). Historical `validation.json` / `validation_r3.json` / `api_validation.json` / `api_validation_r3.json` mtimes unchanged.
+
+```
+work/venv/bin/python outputs/observatory/tests/validate_physics.py
+work/venv/bin/python outputs/observatory/tests/validate_api.py
+```
+
+- Physics → `outputs/observatory/validation_r4.json` (61 s): isolated vs `n_galaxies=1` max |Δstate| = 0; vs `origin/main` revision-3 `physics.py` max |Δstate| = 0 (archived `44c528079f88/model_source.py` is not in this workspace). Lifecycle-off 2048 energy change 4.40e-5 at dt 0.02 / θ 0.4 and 5.69e-6 at dt 0.01 (same bounds as r3). Two-galaxy head-on N=2048: slices 1024+1024, separation 19.79 → 16.44 after 80 steps, finite. Five galaxies N=4096: slices 820+819×4, finite. Retrograde g2_spin=-1: L_z(A)=+2.06, L_z(B)=-4.57. Two-galaxy lifecycle 200 steps: mass drift 1.7e-16, disk_mask length N, halo types unchanged. Isolated lifecycle speed 40 / 500 steps: mass drift 0.0, 307 births; deaths/SN 60/5 on this serial tree (r3 JSON recorded 61/3 on the Mac OpenMP build — same stellar.py on this IC stream matches 60/5).
+- API → `outputs/observatory/api_validation_r4.json` (40 s, port 8767, temp dir): `n_galaxies=6` → 400; `n=10000` `n_galaxies=5` OK; 2-galaxy POST: `meta.n_galaxies==2`, `model_revision==4`, 24-byte frames, two SMBHs, baryon mass 2.4, pause/restart first frame identical, summary 5,458 bytes with `galaxies` kept; isolated `n_galaxies=1` OK; `/lab` has Start+Stop and no Three.js; protected DELETE 400.
+- Browser (embedded Chromium): Compute shows Encounter + Galaxy 2–5 with no disclosure; Galaxy 3–5 unused rows dim with “not used unless galaxy count ≥ i”; estimate names 2 galaxies and first passage ~245 Myr; Start/Stop on the right; 700 px columns stack. JS heap 1.8 MB; zero `/frames` requests from Compute. Observe Galaxy color mode shows a 5-swatch legend and two birth-colored clumps. No JS errors.
+
+**Server.** Port 8766 is serving this revision-4 code with disposable job `d81656302d72` **complete** (10,000 particles, 2 galaxies, 201 frames, lifecycle off) under `work/observatory-data` (gitignored). Ctrl+C is a graceful shutdown. Tests used 8767.
+
+**Outstanding / honest limits.** Superparticles, collisionless, no SPH/ram pressure, no FoF remapping. Default 245 Myr is a first passage, not MW–M31. Barnes–Hut with several dense concentrations is coarser than an isolated galaxy. Birth-galaxy colors stay frozen. This cloud workspace has no archived `44c528079f88/model_source.py`; isolated bit-match is against `origin/main` revision-3 `physics.py` when git is available.
+
 ## Local Git setup (2026-09-16)
 
 Initialized a local repository on `main` and captured the current revision-3 project as the initial baseline. Earlier agent edit history is unavailable; archived run sources and historical benchmark files remain the older evidence. No remote was created. Source, documentation, helper scripts, bundled assets, and benchmark evidence are tracked; installed runtimes, live experiment data, logs, caches, and local environment secrets are ignored and remain on disk. See `outputs/GIT_GUIDE.md` for handoff and recovery commands.
@@ -18,8 +43,28 @@ Validation: existing `validate_api.py` passed with `OBSERVATORY_TEST_REPORT="$PW
 
 Production server restarted gracefully only after active run ef1911feb4ff completed (168 frames). Saved checkpoint jobs were preserved; 60f9f09c5698 becomes interrupted after the normal server shutdown, available to resume. No production experiments were queued or deleted. Queue starts empty and held. A later live check showed a newly created production run f747e062e82e computing (31 frames); this agent did not create or alter that run. Ten experiments are now saved, leaving two queue slots under the existing cap. Remaining limitations: server must remain running; restart requires explicit continuation; queue does not bypass the 12-run cap or add a RAM cap. Test run data is isolated under ignored work/queue-ui-data.
 
+## Merge queue + collision lab (2026-09-16)
+
+Fetched `origin/main` (`8e3f6a5`, persistent sequential queue) into `cursor/galaxy-collision-lab-428d`. GitHub reported `CONFLICTING` only in two files. Both hunks were simple keep-both resolutions; there was no conflicting product intent.
+
+**Resolved.** [`outputs/observatory/static/lab.js`](outputs/observatory/static/lab.js): draft key `orbital-lab-draft-v2`, `ACTIVE=['running','initializing','pausing']` (waiting `queued` jobs are not a live worker), `let queue={enabled:false,ids:[]}`, notes provenance kept. [`outputs/observatory/tests/validate_api.py`](outputs/observatory/tests/validate_api.py): r4 coverage plus `Path(os.environ.get('OBSERVATORY_TEST_REPORT',APP/'api_validation_r4.json'))`. Auto-merged without markers: `server.py` (r4 SCHEMA + queue scheduler; `ACTIVE` omits `queued`), `lab.html` (Encounter honesty + Add to queue / queue panel), `style.css` (`.slider-row.unused` + `.queue-panel`), HANDOFF/README (both sections). Incoming from main: `validate_queue.py`, queue evidence JSON/screenshots, `.gitignore` `work/queue-ui-data/`.
+
+**Tests (measured after the merge commit).** Isolated port 8767, `PYTHONPATH="$PWD/work/openmp"` `work/venv/bin/python`. Physics tests were not re-run (ICs / `physics.py` / `stellar.py` / `worker.py` unchanged by the merge). Historical `validation.json` / `validation_r3.json` / `api_validation.json` / `api_validation_r3.json` mtimes unchanged.
+
+```
+PYTHONPATH="$PWD/work/openmp" work/venv/bin/python outputs/observatory/tests/validate_api.py
+PYTHONPATH="$PWD/work/openmp" work/venv/bin/python outputs/observatory/tests/validate_queue.py
+```
+
+- API → `outputs/observatory/api_validation_r4.json` (40 s): `n_galaxies=6` → 400; five-galaxy N=10k OK; 2-galaxy pause/restart first frame identical; isolated `n_galaxies=1` OK; `/lab` Start+Stop and no Three.js; over-budget omitted-`n_galaxies` uses default 2 (×1.05): "Estimated 561 h … max span … 1069.0 model time units."; planets energy 2.78e-16; `model_revision` 4; 24-byte frames.
+- Queue → `outputs/observatory/queue_validation.json` (25 s): all nine assertions true (order persisted, reorder, restart hold, pause blocks next, hold lets current finish, sequential completion, queued removal, error holds queue, explicit continue). Galaxy enqueue without `n_galaxies` takes Compute default 2.
+
+**Browser (embedded Chromium on :8766 after restart).** Compute: Encounter Live galaxies default 2; Galaxy 2–5 groups always visible; 3–5 unused copy when count is 2; toggling count 2→1→2 dimmed Galaxy 2 then restored it; estimate names 2 galaxies and first passage ~245 Myr; Start / Add to queue / Stop + queue panel; queue message "Held. Queue held after server startup…"; 700 px columns stack, no horizontal overflow covering queue controls. Console: no errors. Network: no `/frames`, no `three.module`. Did not Start computation or Start queue.
+
+**Server.** Pre-merge :8766 had only disposable `d81656302d72` **complete**; SIGINT then restarted onto this merge with `OBSERVATORY_DATA=/workspace/work/observatory-data`. `/api/queue` is present, empty, held. No experiments were queued or deleted. Ctrl+C is a graceful shutdown. Older notes below about `cee19b92a783` running on PID 553 are historical.
+
 ## Current state
-A functioning local observatory with a Python HTTP server, CPU REBOUND workers and a Three.js browser viewer. Both requested modes are implemented and tested. The latest galaxy is **model revision 3** (parameterized structure + optional stellar lifecycle); revision 2 remains the comparison run. There are four protected saved experiments (`0e45a855ba11` revision-1 galaxy, `44c528079f88` revision-2 galaxy, `ff56d195ce89` original Solar System, `58ab7c268cdd` 3× Jupiter) plus one revision-3 example (`ce051010c143`, 10,000 particles, lifecycle speed 40, central black hole — created from the Compute page during UI verification; removable). No simulation should need to run merely to view them.
+A functioning local observatory with a Python HTTP server, CPU REBOUND workers and a Three.js browser viewer. Both requested modes are implemented and tested. The latest galaxy is **model revision 4** (1–5 live N-body galaxies; isolated `n_galaxies=1` still matches revision 3). Revision 3 remains the parameterized isolated lab; revision 2 remains the comparison run. There are four protected saved experiments (`0e45a855ba11` revision-1 galaxy, `44c528079f88` revision-2 galaxy, `ff56d195ce89` original Solar System, `58ab7c268cdd` 3× Jupiter) plus one revision-3 example (`ce051010c143`, 10,000 particles, lifecycle speed 40, central black hole — created from the Compute page during UI verification; removable). No simulation should need to run merely to view them.
 
 **Server state (2026-09-15 ~22:43 local).** Port 8766 is running (`run.sh` PID 553). The 200,000-particle run `cee19b92a783` was resumed from checkpoint frame 11 and is **running** (worker PID 794, 14 threads). Measured after resume: frame 12 saved at 5.06 model time / ~124 Myr, ~48 s for that chunk. Remaining **prediction** from that rate: ~226 frames × ~48–54 s ≈ 3.0–3.4 h wall (the pre-start estimator of ~1.66 h total is faster than this measured 200k+lifecycle pace). Do not treat that as a calibrated ETA. Ctrl+C on the server terminal is a graceful shutdown and would interrupt this job again.
 
@@ -79,7 +124,7 @@ Plan: `~/.cursor/plans/galaxy_parameter_lab_1093fc9f.plan.md` (not edited). Ever
 - `outputs/observatory/run.sh`: derives the project root from its own location; uses the existing Python environment and native library.
 - `outputs/observatory/start.sh`: terminal launcher used by `Start OpenOrbital`; reuses a healthy :8766 server, otherwise starts `run.sh` and opens the Compute dashboard.
 - `outputs/observatory/tests/`: numerical checks and an isolated server-restart test.
-- `outputs/observatory/validation.json`, `api_validation.json`, `test_instance_results.json`: revision-2 recorded evidence, not configuration. `validation_r3.json`, `api_validation_r3.json`: revision-3 evidence. Tests write only the `_r3` files.
+- `outputs/observatory/validation.json`, `api_validation.json`, `test_instance_results.json`: revision-2 recorded evidence, not configuration. `validation_r3.json`, `api_validation_r3.json`: revision-3 evidence. `validation_r4.json`, `api_validation_r4.json`: revision-4 evidence. Tests write only the `_r4` files.
 - `outputs/`: earlier benchmark source, figures and raw results. Keep them as provenance.
 - `work/observatory-data/<id>/`: saved experiments. `config.json` is the input, `meta.json` describes units/times/components, `status.json` is worker progress. `model_source.py` archives the generator for new runs.
 
@@ -125,4 +170,4 @@ All files were moved from the Codex task directory into this folder. Compatibili
 The Python executable ultimately depends on this Mac's Homebrew installation, and the native OpenMP build links to `/opt/homebrew/opt/libomp/lib/libomp.dylib`. For another machine, create a new venv and install outputs/observatory/requirements.txt; rebuild REBOUND for that platform rather than copying its binary. `outputs/build_openmp.sh` records this Mac's compiler/SDK flags. It also runs benchmarks when invoked, so inspect it before reuse. macOS 26.5 SDK was selected to avoid a local SDK 27 linker mismatch.
 
 ## Sensible next work, not yet implemented
-Improve disk equilibrium over multiple orbital periods; add a validated second-galaxy encounter (two–five galaxies); SPH or a feedback-energy model; isochrone-based stages; inspector comparison charts across runs; a worker RAM hard cap; measure the 120 h estimator at 200k and with lifecycle on. First preserve the working two-page, two-mode observatory. Do not imply those future features already exist.
+Improve disk equilibrium over multiple orbital periods; SPH or a feedback-energy model; isochrone-based stages; inspector comparison charts across runs; a worker RAM hard cap; measure the 120 h estimator at 200k, with lifecycle on, and with `n_galaxies>1`. Do not imply those future features already exist.
