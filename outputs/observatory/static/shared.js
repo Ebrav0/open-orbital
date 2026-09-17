@@ -19,7 +19,7 @@ function cloneSliders(i){return [
   {id:`g${i}_spin`,group:`Galaxy ${i}`,galaxy:i,label:'Disk spin',kind:'choice',stops:[1,-1],labels:['Prograde','Retrograde'],default:1,unit:'',hint:'+1 with Galaxy A; −1 flips in-plane rotation.'}
 ]}
 export const GALAXY_SLIDERS=[
-  {id:'n',group:'Compute',label:'Gravitating particles',kind:'choice',stops:[10000,30000,100000,200000],default:100000,unit:'superparticles',hint:'200,000 is the ceiling; each dot is a superparticle, not one star. 2–5 galaxies share this budget.'},
+  {id:'n',group:'Compute',label:'Gravitating particles',kind:'choice',stops:[10000,30000,100000,200000,500000,1000000],default:100000,unit:'superparticles',hint:'1,000,000 is the ceiling. Each dot is a superparticle, not one star. 2–5 galaxies share this budget. One million is live CPU N-body; the 120 h cap still applies, and Observe uses more GPU memory.'},
   {id:'threads',group:'Compute',label:'CPU threads',kind:'choice',stops:[1,4,8,10,14],default:8,unit:'threads'},
   {id:'duration',group:'Compute',label:'Simulation span',min:1,max:1200,step:1,default:10,unit:'model time units',physical:myr,hint:'Maximum updates live from the 120 h wall-time estimate as N, threads, dt and lifecycle change.'},
   {id:'seed',group:'Compute',label:'Random seed',kind:'number',min:0,max:4294967295,step:1,default:731,unit:'integer'},

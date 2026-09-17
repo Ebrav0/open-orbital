@@ -7,5 +7,6 @@
   "sequential_completion": true,
   "queued_removal": true,
   "error_holds_queue": true,
-  "explicit_continue_after_error": true
+  "explicit_continue_after_error": true,
+  "restart_keeps_enabled": true
 }

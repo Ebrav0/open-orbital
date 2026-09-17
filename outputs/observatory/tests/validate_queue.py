@@ -60,7 +60,15 @@ with tempfile.TemporaryDirectory(prefix='orbital-queue-') as td:
         api('/api/queue',dict(action='start'));until(lambda:phase(e)=='error')
         until(lambda:not api('/api/queue')['enabled']);assert phase(f)=='queued'
         api('/api/queue',dict(action='start'));until(lambda:phase(f)=='complete')
-        result=dict(order_persisted=True,reordered=True,restart_held=True,pause_blocks_next=True,hold_allows_current_to_finish=True,sequential_completion=True,queued_removal=True,error_holds_queue=True,explicit_continue_after_error=True)
+        g=api('/api/queue/jobs',dict(mode='planets',duration=1,notes='resume-a'))
+        h=api('/api/queue/jobs',dict(mode='planets',duration=1,notes='resume-b'))
+        api('/api/queue',dict(action='start'))
+        until(lambda:api('/api/jobs/'+g['id'])['status']['frames']>=1 or phase(g)=='complete')
+        proc.terminate();proc.wait(timeout=20);proc=start()
+        assert api('/api/queue')['enabled'] is True
+        until(lambda:phase(g)=='complete')
+        until(lambda:phase(h)=='complete')
+        result=dict(order_persisted=True,reordered=True,restart_held=True,pause_blocks_next=True,hold_allows_current_to_finish=True,sequential_completion=True,queued_removal=True,error_holds_queue=True,explicit_continue_after_error=True,restart_keeps_enabled=True)
         (APP/'queue_validation.json').write_text(json.dumps(result,indent=2));print(json.dumps(result))
     finally:
         if proc and proc.poll() is None:proc.terminate();proc.wait(timeout=20)

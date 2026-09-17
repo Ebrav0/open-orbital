@@ -1,0 +1,23 @@
+{
+  "model_revision": 4,
+  "n": 1000000,
+  "small_n_keeps_root_1024": true,
+  "box_expand_after_escape": true,
+  "expanded_root": 9599.997612468234,
+  "init_seconds": 3.294102165964432,
+  "n_loaded": 1000000,
+  "root_size": 1024.0,
+  "max_abs_position": 98.17164262851882,
+  "mass_sum": 21.000000000000007,
+  "sustained_steps": 20,
+  "sustained_seconds": 113.39324687502813,
+  "seconds_per_step": 5.669662343751407,
+  "finite_after_steps": true,
+  "worker_seconds": 123.19341904198518,
+  "worker_phase": "complete",
+  "worker_frames": 21,
+  "worker_steps": 20,
+  "worker_error": null,
+  "worker_root": 1024.0,
+  "frame_bytes": 504000000
+}

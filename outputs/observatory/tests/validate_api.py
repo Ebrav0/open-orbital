@@ -29,8 +29,11 @@ with tempfile.TemporaryDirectory(prefix='orbital-api-') as td:
         until(lambda:api('/api/system'));return p
     try:
         proc=start()
-        lab=urllib.request.urlopen(URL+'/lab').read().decode();assert '<canvas' not in lab and 'three' not in lab.lower() and 'Start computation' in lab and 'Stop computation' in lab and 'lab.js' in lab and 'id="start-compute"' in lab and 'id="stop-compute"' in lab
-        assert 'three.module.js' in urllib.request.urlopen(URL+'/').read().decode()
+        lab=urllib.request.urlopen(URL+'/lab').read().decode();assert '<canvas' not in lab and 'three' not in lab.lower() and 'Start computation' in lab and 'Stop computation' in lab and 'lab.js' in lab and 'id="start-compute"' in lab and 'id="stop-compute"' in lab and 'health-strip' in lab
+        home=urllib.request.urlopen(URL+'/').read().decode();assert 'three.module.js' in home and 'value="1000000"' in home
+        schema=api('/api/schema');result['n_choices']=schema['schema']['n']['allowed'];assert result['n_choices']==[10000,30000,100000,200000,500000,1000000]
+        expect(400,lambda:api('/api/jobs',dict(mode='galaxy',n=250000)))
+        assert api('/api/system').get('max_runs')==24
         for js in('/lab.js','/shared.js'):
             src=urllib.request.urlopen(URL+js).read().decode();assert "from 'three'" not in src and 'three.module' not in src and 'WebGLRenderer' not in src and '/frames' not in src,js
         result['bad_knob_error']=expect(400,lambda:api('/api/jobs',dict(mode='galaxy',n=10000,warmth=9)))
@@ -62,7 +65,8 @@ with tempfile.TemporaryDirectory(prefix='orbital-api-') as td:
         assert 'times' in api(url)['meta']
         ck=json.loads((Path(td)/jid/'checkpoint.json').read_text());assert ck.get('baryons','').startswith('baryons-') and (Path(td)/jid/ck['baryons']).exists()
         proc.terminate();proc.wait(timeout=20);proc=start()
-        assert api(url)['status']['phase']=='interrupted'
+        still=until(lambda:(q:=api(url))['status']['phase']=='paused' and q)
+        result['pause_survives_restart']=True
         api(url+'/control',dict(action='run'));end=until(lambda:(q:=api(url))['status']['phase']=='complete' and q)
         assert end['status']['frames']==end['meta']['total_frames'] and api(url+'/frames?start=0')==first and end['status']['computed_time']>3.99
         lc=end['status']['diagnostics']['lifecycle'];assert lc['births_cumulative']>0 and abs(lc['baryon_mass']-2.4)<1e-6

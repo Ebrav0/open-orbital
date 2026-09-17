@@ -50,6 +50,30 @@ def set_threads(n):
         omp.omp_set_num_threads(int(n));omp.omp_set_dynamic(0)
     except OSError:pass
 
+TREE_ROOT_DEFAULT=1024.0
+
+def _add_particles(s,pos,vel,mass):
+    """Load N particles via one serialized write. Tree gravity is enabled after COM."""
+    n=len(mass)
+    q=np.empty((n,6),np.float64);q[:,:3]=pos;q[:,3:]=vel
+    m=np.ascontiguousarray(mass,np.float64)
+    ghost=rebound.Particle()
+    for _ in range(n):s.add(ghost)
+    s.set_serialized_particle_data(xyzvxvyvz=np.ascontiguousarray(q),m=m)
+
+def apply_tree_box(s,margin=4.0):
+    """Grow the Barnes–Hut root so particles stay inside. Never shrinks.
+    Isolated revision-4 ICs keep root 1024 (halo truncated at 100); encounters and
+    long runs expand when the occupied half-width times margin exceeds the box."""
+    if s.N<=0:return float(s.root_size or TREE_ROOT_DEFAULT)
+    q,_=arrays(s)
+    extent=float(np.max(np.abs(q[:,:3])))
+    size=float(s.root_size or TREE_ROOT_DEFAULT)
+    half=.5*size
+    if extent*margin<=half:return size
+    s.root_size=max(TREE_ROOT_DEFAULT,2.0*extent*margin)
+    return float(s.root_size)
+
 def arrays(s):
     q=np.empty((s.N,6),dtype=np.float64);m=np.empty(s.N)
     s.serialize_particle_data(xyzvxvyvz=q,m=m)
@@ -217,9 +241,11 @@ def galaxy(n=100000,seed=731,theta=.4,dt=.02,**overrides):
     disk_mask=np.zeros(n,dtype=np.uint8)
     for g,b in zip(galaxies,blocks):disk_mask[g['start']:g['start']+b['disk_count']]=1
     s=rebound.Simulation();s.G=1;s.dt=dt;s.integrator='leapfrog';s.softening=eps
-    s.root_size=2048 if G>1 else 1024;s.N_root_x=s.N_root_y=s.N_root_z=1;s.gravity='tree';s.opening_angle2=theta**2
-    for p,v,m in zip(pos,vel,mass):s.add(m=m,x=p[0],y=p[1],z=p[2],vx=v[0],vy=v[1],vz=v[2])
+    s.root_size=2048 if G>1 else TREE_ROOT_DEFAULT;s.N_root_x=s.N_root_y=s.N_root_z=1
+    _add_particles(s,pos,vel,mass)
     s.move_to_com()
+    apply_tree_box(s)
+    s.gravity='tree';s.opening_angle2=theta**2
     q0,m0=arrays(s)
     for g in galaxies:
         sl=slice(g['start'],g['start']+g['n']);mw=m0[sl]

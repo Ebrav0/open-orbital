@@ -2,7 +2,7 @@
 # Keep loopback binding, input bounds, one-active-job checks, protected runs and existing run data.
 # SCHEMA here is the validation authority; static/shared.js mirrors it for the Compute page.
 """Loopback-only server and isolated CPU job manager. Stdlib HTTP, local assets."""
-import os,sys,json,re,time,subprocess,threading,uuid,argparse,signal,shutil,math
+import os,sys,json,re,time,subprocess,threading,uuid,argparse,signal,shutil,math,struct
 from pathlib import Path
 from http.server import ThreadingHTTPServer,BaseHTTPRequestHandler
 from urllib.parse import urlparse,parse_qs,unquote
@@ -11,13 +11,13 @@ BASE=Path(__file__).resolve().parent
 DATA=Path(os.environ.get('OBSERVATORY_DATA',BASE.parents[1]/'work/observatory-data')).resolve();DATA.mkdir(parents=True,exist_ok=True)
 PROCESSES={};LOCK=threading.Lock()
 PROTECTED={'0e45a855ba11','44c528079f88','ff56d195ce89','58ab7c268cdd'}
-WALL_CAP_HOURS=120;MAX_RUNS=12;ACTIVE=['running','initializing','pausing']
+WALL_CAP_HOURS=120;MAX_RUNS=24;ACTIVE=['running','initializing','pausing']
 REFERENCE_SECONDS=157.84   # measured: 100,000 particles, 10 threads, 500 steps, model revision 2
 
 CLONE_AZIMUTH={2:0,3:120,4:240,5:180}
 # id -> (kind, allowed) where kind is 'choice', 'float', 'int', 'bool', 'list8'
 SCHEMA=dict(
-    n=('choice',[10000,30000,100000,200000]),threads=('choice',[1,4,8,10,14]),seed=('int',(0,2**32-1)),
+    n=('choice',[10000,30000,100000,200000,500000,1000000]),threads=('choice',[1,4,8,10,14]),seed=('int',(0,2**32-1)),
     n_galaxies=('choice',[1,2,3,4,5]),
     disk_mass=('float',(.2,5)),halo_mass=('float',(2,80)),disk_fraction=('float',(.15,.45)),disk_scale=('float',(.5,3)),disk_thickness=('float',(.03,.25)),halo_scale=('float',(1.5,10)),warmth=('float',(.4,3)),smbh_mass=('float',(0,.1)),
     lifecycle_enabled=('bool',None),gas_fraction=('float',(0,.8)),t_sf=('float',(.1,20)),lifecycle_speed=('float',(1,80)),sf_density_bias=('float',(0,1)),imf_mmin=('float',(.05,1)),imf_mmax=('float',(20,150)),grow_rate=('float',(0,1)),sn_kick_kms=('float',(0,200)),
@@ -74,9 +74,18 @@ def annotate_pause(status,cfg,meta,control):
 def job(p,summary=False):
     cfg=read(p/'config.json',{});status=read(p/'status.json',dict(phase='queued',frames=0,progress=0));meta=read(p/'meta.json',{})
     control=read(p/'control.json',{})
-    if status['phase'] in ['running','initializing','paused','pausing'] and not alive(p.name):
-        status['phase']='interrupted' if (p/'checkpoint.json').exists() else 'error';status['error']='Worker stopped. Resume the saved checkpoint.' if status['phase']=='interrupted' else 'Worker stopped before its first checkpoint.'
+    if status['phase'] in ['running','initializing','pausing'] and not alive(p.name):
+        if (p/'checkpoint.json').exists():
+            status['phase']='paused' if control.get('action')=='pause' else 'interrupted'
+            status['error']='Worker stopped. Resume the saved checkpoint.' if status['phase']=='interrupted' else status.get('error')
+            if status['phase']=='paused' and 'error' in status:status.pop('error',None)
+        else:
+            status['phase']='error';status['error']='Worker stopped before its first checkpoint.'
     status=annotate_pause(status,cfg,meta,control)
+    ck=p/'checkpoint.json'
+    if ck.exists():
+        try:status['checkpoint_age_seconds']=time.time()-ck.stat().st_mtime
+        except OSError:pass
     if summary:
         meta={k:v for k,v in meta.items() if k not in ('times','bodies','initial_diagnostics','params')}
         status={k:v for k,v in status.items() if k!='flags'}
@@ -85,11 +94,72 @@ def job(p,summary=False):
 
 def jobs(summary=False):return sorted([job(p,summary) for p in DATA.iterdir() if p.is_dir() and (p/'config.json').exists()],key=lambda x:x['config'].get('created',0),reverse=True)
 
-def busy(except_id=None):return any(j['id']!=except_id and j['status']['phase'] in ACTIVE for j in jobs(True))
+def busy(except_id=None):
+    if any(jid!=except_id and proc is not None and proc.poll() is None for jid,proc in PROCESSES.items()):return True
+    return any(j['id']!=except_id and j['status']['phase'] in ACTIVE for j in jobs(True))
+
+def pid_running(pid):
+    try:os.kill(pid,0);return True
+    except OSError:return False
+
+def cmdline_of(pid):
+    try:
+        r=subprocess.run(['ps','-p',str(pid),'-ww','-o','command='],capture_output=True,text=True)
+        return r.stdout.strip()
+    except Exception:return ''
+
+class Adopted:
+    def __init__(self,pid):self.pid=pid
+    def poll(self):return None if pid_running(self.pid) else 1
+    def terminate(self):
+        try:os.kill(self.pid,signal.SIGTERM)
+        except OSError:pass
+    def kill(self):
+        try:os.kill(self.pid,signal.SIGKILL)
+        except OSError:pass
+    def wait(self,timeout=None):
+        end=time.time()+(timeout if timeout is not None else 1e9)
+        while time.time()<end:
+            if self.poll() is not None:return
+            time.sleep(.05)
+        raise subprocess.TimeoutExpired(str(self.pid),timeout)
+
+def adopt(p):
+    path=p/'worker.pid'
+    if not path.exists():return False
+    try:pid=int(path.read_text().strip())
+    except Exception:return False
+    if not pid_running(pid):return False
+    cmd=cmdline_of(pid)
+    if str(p) not in cmd:return False
+    PROCESSES[p.name]=Adopted(pid);return True
 
 def spawn(p):
+    if adopt(p):return
     env=os.environ.copy();env['OMP_NUM_THREADS']=str(read(p/'config.json',{}).get('threads',1));env['OMP_WAIT_POLICY']='PASSIVE'
-    with (p/'worker.log').open('ab') as log:PROCESSES[p.name]=subprocess.Popen([sys.executable,str(BASE/'worker.py'),str(p)],stdout=log,stderr=log,env=env)
+    cmd=[sys.executable,str(BASE/'worker.py'),str(p)]
+    cafe=shutil.which('caffeinate')
+    if cafe:cmd=[cafe,'-dims']+cmd
+    with (p/'worker.log').open('ab') as log:
+        PROCESSES[p.name]=subprocess.Popen(cmd,stdout=log,stderr=log,env=env,start_new_session=True)
+
+def stop_proc(proc):
+    if proc is None or proc.poll() is not None:return
+    try:
+        if not isinstance(proc,Adopted) and getattr(proc,'pid',None):
+            os.killpg(proc.pid,signal.SIGTERM)
+        else:proc.terminate()
+    except OSError:proc.terminate()
+
+def active_worker_pid():
+    for jid,proc in PROCESSES.items():
+        if proc is None or proc.poll() is not None:continue
+        path=DATA/jid/'worker.pid'
+        if path.exists():
+            try:return int(path.read_text().strip())
+            except Exception:pass
+        return getattr(proc,'pid',None)
+    return None
 
 def coerce(key,value):
     kind,allowed=SCHEMA[key]
@@ -113,7 +183,7 @@ def coerce(key,value):
     raise ValueError(key)
 
 def estimate_seconds(cfg):
-    """Wall-time estimate from the measured revision-2 reference. Order-of-magnitude for lifecycle runs and 200k."""
+    """Wall-time estimate from the measured revision-2 100k/10-thread reference. Order-of-magnitude for lifecycle, 500k and 1M."""
     if cfg['mode']=='planets':
         bodies=10 if cfg.get('perturber_mass',0)>0 else 9
         return .25*cfg['duration']/12*(bodies/9)**2
@@ -152,10 +222,76 @@ def normalize(config):
     return cfg
 
 # Queue state is a single atomic document. HTTP mutations and dispatch share LOCK.
-# A queued job has no worker. Paused/interrupted current queue work blocks dispatch;
-# restart always holds the queue so no checkpoint is silently skipped.
+# A queued job has no worker. Paused/interrupted current queue work blocks dispatch.
+# Daemon restart keeps queue.enabled and auto-resumes interrupted jobs whose control is run.
 QUEUE_FILE=DATA/'queue.json'
 STOP_SCHEDULER=threading.Event()
+
+def recover():
+    """Adopt live workers, persist dead ones, resume at most one interrupted run (control=run, not wall-capped)."""
+    for p in DATA.iterdir():
+        if not p.is_dir() or not (p/'config.json').exists():continue
+        if adopt(p):continue
+        st=read(p/'status.json',{});ctl=read(p/'control.json',{});phase=st.get('phase')
+        if phase in ('complete','error','queued','paused'):continue
+        if phase in ('running','initializing','pausing'):
+            if (p/'checkpoint.json').exists():
+                st['phase']='paused' if ctl.get('action')=='pause' else 'interrupted'
+                if st['phase']=='interrupted':st['error']='Worker stopped. Resume the saved checkpoint.'
+                else:st.pop('error',None)
+            else:
+                st.update(phase='error',error='Worker stopped before its first checkpoint.')
+            atomic(p/'status.json',st)
+    q=queue_state()
+    if q.get('current'):
+        try:
+            cur=job(folder(q['current']),True)
+            if cur['status']['phase']=='complete':q['current']=None;save_queue(q)
+        except NotFound:
+            q['current']=None;save_queue(q)
+    if busy():return
+    candidates=[]
+    for j in jobs(True):
+        ctl=read(folder(j['id'])/'control.json',{})
+        if j['status']['phase']=='interrupted' and ctl.get('action')=='run' and not j['status'].get('wall_capped'):
+            candidates.append(j)
+    if not candidates:return
+    pick=next((c for c in candidates if c['id']==q.get('current')),None) or candidates[0]
+    spawn(folder(pick['id']))
+
+def history_points(p,cap=2400):
+    path=p/'diagnostics.jsonl'
+    if not path.exists():return dict(points=[])
+    lines=path.read_text().splitlines()[-cap:];points=[]
+    for line in lines:
+        try:points.append(json.loads(line))
+        except Exception:pass
+    return dict(points=points)
+
+def track_particle(p,index):
+    j=job(p);n=int(j['meta'].get('n') or j['config'].get('n') or 0);frames=int(j['status'].get('frames') or 0)
+    stride=int(j['meta'].get('bytes_per_particle') or 16)
+    if index<0 or index>=n:raise ValueError('Particle index out of range')
+    if frames>8000:raise ValueError('Track too long')
+    times=j['meta'].get('times') or [];galaxy=None
+    gpath=p/'galaxy_index.bin'
+    if gpath.exists():
+        raw=gpath.read_bytes()
+        if index<len(raw):galaxy=int(raw[index])
+    points=[]
+    path=p/'frames.bin'
+    if not path.exists() or not n or not frames:return dict(index=index,galaxy=galaxy,n=n,points=[])
+    with path.open('rb') as f:
+        for i in range(frames):
+            f.seek(i*n*stride+index*stride);buf=f.read(stride)
+            if len(buf)!=stride:break
+            vals=struct.unpack('<'+'f'*(stride//4),buf)
+            rec=dict(frame=i,t=times[i] if i<len(times) else None,x=vals[0],y=vals[1],z=vals[2])
+            if len(vals)>3:rec['speed']=vals[3]
+            if len(vals)>4:rec['mass']=vals[4]
+            if len(vals)>5:rec['type']=vals[5]
+            points.append(rec)
+    return dict(index=index,galaxy=galaxy,n=n,points=points)
 
 def queue_state():
     return read(QUEUE_FILE,dict(enabled=False,ids=[],current=None,message='Ready to arrange experiments.'))
@@ -189,11 +325,11 @@ def dispatch_queue():
             q.update(enabled=False,message='Queue held: review the stopped experiment before continuing.');save_queue(q);return
         q['current']=None;save_queue(q)
     # Older paused experiments are independent saved work, not queue barriers.
-    # Adopt a currently computing manual run so pausing it also holds this batch.
+    # A live worker — including a paused one still in its wait loop — blocks dispatch.
     for j in jobs(True):
         if j['status']['phase'] in ACTIVE:
             q['current']=j['id'];save_queue(q);return
-        if alive(j['id']) and j['status']['phase'] not in ('paused','interrupted'):return
+        if alive(j['id']):return
     if not q['ids']:
         q.update(enabled=False,message='Queue finished.');save_queue(q);return
     jid=q['ids'][0];p=folder(jid)
@@ -238,10 +374,16 @@ def remove(jid):
     p=folder(jid);j=job(p,True);phase=j['status']['phase']
     if phase in ACTIVE:raise ValueError('Pause or finish this experiment before removing it.')
     proc=PROCESSES.pop(jid,None)
-    if proc is not None and proc.poll() is None:
-        proc.terminate()
+    stop_proc(proc)
+    if proc is not None:
         try:proc.wait(timeout=20)
-        except subprocess.TimeoutExpired:proc.kill();proc.wait(timeout=5)
+        except subprocess.TimeoutExpired:
+            try:
+                if not isinstance(proc,Adopted) and getattr(proc,'pid',None):os.killpg(proc.pid,signal.SIGKILL)
+                else:proc.kill()
+            except OSError:pass
+            try:proc.wait(timeout=5)
+            except Exception:pass
     q=queue_state()
     if jid in q['ids']:q['ids'].remove(jid)
     if q.get('current')==jid:q['current']=None
@@ -265,7 +407,7 @@ def preview(config):
          ' else: t[:meta.get("disk_count",s.N)]=2\n' \
          't=t.astype(np.float32)\n' \
          'sys.stdout.buffer.write(np.column_stack((q[:,:3],np.linalg.norm(q[:,3:],axis=1),m,t)).astype("<f4").tobytes())'%GALAXY_KEYS
-    r=subprocess.run([sys.executable,'-c',code],input=json.dumps(cfg).encode(),capture_output=True,timeout=5,cwd=BASE,env=dict(os.environ,OMP_NUM_THREADS='1'))
+    r=subprocess.run([sys.executable,'-c',code],input=json.dumps(cfg).encode(),capture_output=True,timeout=12,cwd=BASE,env=dict(os.environ,OMP_NUM_THREADS='1'))
     if r.returncode!=0:raise ValueError('Preview failed: '+r.stderr.decode(errors='replace')[-300:])
     return r.stdout
 
@@ -291,12 +433,22 @@ class Handler(BaseHTTPRequestHandler):
             u=urlparse(self.path);parts=u.path.strip('/').split('/');qs=parse_qs(u.query)
             if u.path=='/api/queue':return self.send(queue_state())
             if u.path=='/api/jobs':return self.send(jobs(summary=qs.get('view',[''])[0]=='summary'))
-            if u.path=='/api/system':return self.send(dict(cpu='Apple M4 Pro',cores=os.cpu_count(),engine='REBOUND 5.1.1 · CPU',data_directory=str(DATA),wall_cap_hours=WALL_CAP_HOURS,max_runs=MAX_RUNS,protected=sorted(PROTECTED),reference_seconds=REFERENCE_SECONDS))
+            if u.path=='/api/system':
+                pid=active_worker_pid()
+                return self.send(dict(cpu='Apple M4 Pro',cores=os.cpu_count(),engine='REBOUND 5.1.1 · CPU',data_directory=str(DATA),wall_cap_hours=WALL_CAP_HOURS,max_runs=MAX_RUNS,protected=sorted(PROTECTED),reference_seconds=REFERENCE_SECONDS,
+                    daemon=os.environ.get('OPENORBITAL_DAEMON')=='1',sleep_prevention='idle' if pid else 'off',worker_pid=pid,lid_close_sleeps=True))
             if u.path=='/api/schema':return self.send(dict(schema={k:dict(kind=v[0],allowed=v[1]) for k,v in SCHEMA.items()},defaults=DEFAULTS,galaxy_keys=GALAXY_KEYS,planet_keys=PLANET_KEYS))
             if len(parts)>=3 and parts[:2]==['api','jobs']:
                 p=folder(parts[2]);j=job(p)
                 if len(parts)==3:return self.send(j)
                 if parts[3]=='log':return self.send(dict(lines=log_tail(p,max(1,min(int(qs.get('tail',[40])[0]),200)))))
+                if parts[3]=='history':return self.send(history_points(p))
+                if parts[3]=='galaxy-index':
+                    g=p/'galaxy_index.bin'
+                    if not g.exists():raise NotFound('No galaxy index')
+                    return self.send(g.read_bytes(),mime='application/octet-stream')
+                if parts[3]=='track':
+                    return self.send(track_particle(p,int(qs.get('index',[0])[0])))
                 if parts[3]=='frames':
                     start=int(qs.get('start',[0])[0]);count=int(qs.get('count',[1])[0]);available=j['status'].get('frames',0);n=j['meta'].get('n',0);stride=n*j['meta'].get('bytes_per_particle',16)
                     if start<0 or count<1 or start+count>available or count*stride>8*1024**2:raise ValueError('Requested frames unavailable or too large')
@@ -328,7 +480,7 @@ class Handler(BaseHTTPRequestHandler):
                     if j['status']['phase'] in ['complete','error']:raise ValueError('This experiment has finished')
                     if action=='run' and busy(p.name):raise ValueError('Pause the other running experiment first')
                     atomic(p/'control.json',dict(action=action,requested_at=time.time()))
-                    if j['status']['phase']=='interrupted' and action=='run':spawn(p)
+                    if action=='run' and j['status']['phase'] in ('interrupted','paused'):spawn(p)
                     updated=job(p)
                     return self.send(dict(ok=True,status=updated['status']))
             self.send(dict(error='Not found'),404)
@@ -351,15 +503,18 @@ if __name__=='__main__':
     print(f'Observatory: http://127.0.0.1:{args.port}  (Compute page: /lab)',flush=True)
     def stop(*_):raise KeyboardInterrupt
     signal.signal(signal.SIGTERM,stop)
-    q=queue_state();q.update(enabled=False,message='Queue held after server startup. Review saved work, then Start queue.');save_queue(q)
+    recover()
     thread=threading.Thread(target=scheduler,daemon=True);thread.start()
     try:server.serve_forever()
     except KeyboardInterrupt:pass
     finally:
         STOP_SCHEDULER.set();thread.join(timeout=5)
-        for p in PROCESSES.values():
-            if p.poll() is None:p.terminate()
+        for p in PROCESSES.values():stop_proc(p)
         for p in PROCESSES.values():
             try:p.wait(timeout=20)
-            except subprocess.TimeoutExpired:p.kill()
+            except subprocess.TimeoutExpired:
+                try:
+                    if not isinstance(p,Adopted) and getattr(p,'pid',None):os.killpg(p.pid,signal.SIGKILL)
+                    else:p.kill()
+                except OSError:pass
         server.server_close()

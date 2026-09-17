@@ -1,5 +1,11 @@
 # Agent handoff — Open Orbital
 
+## Rebase onto collision lab (2026-09-17)
+
+Kept origin/main 2–5 clone-galaxy physics (`build_one_galaxy` / `place_galaxy`, draft `orbital-lab-draft-v2`). Overlay: 1,000,000 particle stops, `MAX_RUNS=24`, Barnes–Hut `apply_tree_box`, LaunchAgent trampoline, lined-up Compute control room, Observe byte-capped frame cache. Resume after a daemon restart now `spawn()`s a paused job (adopt if the worker is still alive). Historical `validation.json` / r3 JSON were not rewritten. Library on 8766 is empty (`GET /api/jobs` `[]`); `PROTECTED` ids still refuse API DELETE if recreated.
+
+**Measured after the rebase merge.** `PYTHONPATH="$PWD/work/openmp" work/venv/bin/python`. Physics → `validation_r4.json` (14.3 s): isolated vs `n_galaxies=1` max |Δstate| = 0; 2048 energy 4.40e-5 / 5.69e-6; two-galaxy head-on 19.79 → 16.44; five-galaxy slices 820+819×4; retrograde L_z A=+2.06 B=-4.57. API → `api_validation_r4.json` (9.9 s, port 8767): `n_choices` 10k…1M; `n=250000` rejected; `n_galaxies=6` → 400; five-galaxy N=10k OK; pause survives restart then Resume completes 201 frames; first frame identical; isolated `n_galaxies=1` OK; `/lab` has `health-strip` and no Three.js; `max_runs=24`. No 1M science job was started. Live 8766 was not restarted.
+
 ## Galaxy collision lab — model revision 4 (2026-09-16)
 
 Implemented 2–5 live N-body galaxies on the existing CPU tree. Isolated `n_galaxies=1` uses the revision-3 disk+halo DF (generator stamped 4). Galaxy A keeps the full knobs; galaxies 2–5 are compact clones. Default **new** Compute/HTTP job is `n_galaxies=2`; `galaxy()` / `GALAXY_DEFAULTS` still default to 1 so omitted keys replay as isolated. Frames stay 24-byte `xyzsmt`. Compute tab still has no Three.js. No canned merger path.
@@ -24,6 +30,48 @@ work/venv/bin/python outputs/observatory/tests/validate_api.py
 **Server.** Port 8766 is serving this revision-4 code with disposable job `d81656302d72` **complete** (10,000 particles, 2 galaxies, 201 frames, lifecycle off) under `work/observatory-data` (gitignored). Ctrl+C is a graceful shutdown. Tests used 8767.
 
 **Outstanding / honest limits.** Superparticles, collisionless, no SPH/ram pressure, no FoF remapping. Default 245 Myr is a first passage, not MW–M31. Barnes–Hut with several dense concentrations is coarser than an isolated galaxy. Birth-galaxy colors stay frozen. This cloud workspace has no archived `44c528079f88/model_source.py`; isolated bit-match is against `origin/main` revision-3 `physics.py` when git is available.
+
+## Compute page alignment (2026-09-17)
+
+Compute is now a two-column control room with a shared form grid. Labels, sliders, and values share the same x-positions (measured at 1920: labels x=28, tracks x=248–260, values x=799). Seed is no longer duplicated. Right-hand status, queue, history, metrics, diagnostics, events, and saved runs sit in matching cards. Start spans the action row; Add to queue and Stop sit side by side. Compute still has no canvas or Three.js.
+
+**Measured.** `PYTHONPATH="$PWD/work/openmp" work/venv/bin/python outputs/observatory/tests/validate_api.py` (12.6 s, isolated 8767): `/lab` still has Start/Stop/`health-strip` and no canvas. Browser 1920: galaxy and planetary grids aligned, no horizontal overflow, Start enabled, **0/24**. 700 px: columns stack, `scrollWidth=700`, Start remains in the status card. Observe header still has Observe/Compute plus Galaxy/Planetary. No science job was started. Live 8766 was not restarted (static assets only).
+
+## Cleared the library; save cap 24 (2026-09-17)
+
+User asked to remove all former runs and save 24. All 12 experiment folders under `work/observatory-data` are gone, including the four previously protected comparison copies (`0e45a855ba11`, `44c528079f88`, `ff56d195ce89`, `58ab7c268cdd`). Unprotected ids were `DELETE`d through the live API; the protected four were removed on disk because the API still returns 400 for those ids. `MAX_RUNS` is now **24**. Historical benchmark JSON (`validation.json`, r3/r4, `validation_1m.json`) was not deleted. No new science job was started.
+
+**Live 8766.** LaunchAgent `com.openorbital.observatory` kickstart after the cap change (Python PID 74647). `GET /api/jobs` is `[]`. `GET /api/system`: `max_runs=24`, `daemon=true`, `worker_pid=null`, `sleep_prevention=off`. Remaining files: `daemon.json`, `queue.json` (held, empty), `server.log`. The four comparison ids remain in `PROTECTED` so a recreated folder with those names still cannot be `DELETE`d from the UI.
+
+**Measured.** `PYTHONPATH="$PWD/work/openmp" work/venv/bin/python outputs/observatory/tests/validate_api.py` (12.3 s, isolated port 8767): protected DELETE still 400; finished DELETE ok; pause/auto-resume unchanged. Physics tests not re-run (ICs unchanged). Browser Compute: run count **0/24**, Start enabled, galaxy and planetary lists empty. Observe: **SAVED EXPERIMENTS 0**, “A new experiment awaits”. No 1M job was started.
+
+## Why 1M Start failed, and 1M sustain tests (2026-09-17)
+
+The 1M computation **never queued**. Port 8766 already holds **12/12** experiments, so `POST /api/jobs` returns *12 experiments are saved. Remove a run before creating more.* There is no 1M folder on disk. The newest job `01b1cdfee9e9` is a **200,000**-particle two-galaxy encounter (duration 329, 14 threads) that ran 158 frames / 7.67 h wall then died with `Particle is outside of simulation box. Cannot add to tree` (root 1024, particles must stay in ±512). Compute now disables Start/Add to queue when the save cap is full. Protected ids were not removed.
+
+**Tree box.** Isolated revision-4 ICs still use root 1024 (halo truncated at 100). The worker grows the Barnes–Hut root when the occupied half-width times a margin exceeds the box, and retries a leapfrog step after that error. Particles are loaded with a serialized write, then tree gravity is turned on after COM. ICs for existing N are unchanged.
+
+**Measured (isolated, not the live 8766 library).** `validate_physics.py` still 0.0 rev2/rev3 Δstate; 2048 energy 4.40e-5 / 5.69e-6. `validate_api.py` 12.8 s including the 12/12 button copy. `validate_million.py` → `validation_1m.json` (251 s): 1M lifecycle-off init **3.29 s**, N=1,000,000, root 1024, max |x| 98.2; 20 leapfrog steps **5.67 s/step**, all finite; worker duration 0.4 completed **21 frames / 20 steps** in 123 s, 504 MB frames, no error. Escape at x=600 expanded the root to ~9600 and continued. That is a short live-tree run, **not** a 120 h proof or a calibrated galaxy. Historical `validation.json` / r3 JSON were not modified. No 1M job was added to the 12-run library.
+
+To start 1M on 8766, Remove one unprotected run (the failed encounter `01b1cdfee9e9` and the 10k smoke `ce051010c143` are removable). Then Start from the 1M slider. Estimator ~45 min at 8 threads × 245 Myr is in the same ballpark as 5.67 s/step × 500 steps ≈ 47 min (lifecycle off); lifecycle on is slower.
+
+## Particle ceiling 1,000,000 (2026-09-16)
+
+Galaxy `n` stops are now 10k / 30k / 100k / 200k / 500k / 1M on Compute, Observe’s start menu, and `SCHEMA` (the server still rejects other values). Defaults stay 100,000. Physics ICs for those older N values are unchanged (no model-revision bump). The 120 h wall-time cap, 24-run cap, and disk-space check remain. Observe frame cache is byte-capped (~96 MB) so 1M playback keeps about four frames instead of twelve. 1M dots are still superparticles; a short 1M run would not prove long-term stability. Wall estimates at 500k/1M still scale from the revision-2 100k/10-thread point; the supplemental OpenMP 1M sphere step (2.274 s/step at 8 threads) is a different initial condition.
+
+No 1M science job was started this session.
+
+**Measured.** `PYTHONPATH="$PWD/work/openmp" work/venv/bin/python outputs/observatory/tests/validate_api.py` → `api_validation_r4.json` (12.7 s, port 8767). `n_choices` 10k…1M; `n=250000` rejected; 200k×1 thread×duration 5000 still over-budget (535 h). Physics tests not re-run (ICs for existing N unchanged). Production 8766 LaunchAgent kickstart: PID 60770, `daemon=true`, 11 jobs, paused/interrupted unchanged. Browser Compute: slider ticks 10k/30k/100k/200k/500k/1M; readout 1,000,000; 8 threads × duration 10 estimates **45.4 min** (prediction) and ~0.99 GB engine RAM; 1 thread shrinks live max span to **198** model units. Desktop 1920 and 700 px: no horizontal overflow. Compute still has no canvas.
+
+## Dashboard launch fix (2026-09-16)
+
+`start-openorbital` / `Start Open Orbital.command` failed because LaunchAgent `com.openorbital.observatory` executed `outputs/observatory/run.sh` on Desktop. macOS TCC returns `Operation not permitted` (exit 126); KeepAlive was crash-looping (`runs` 10+, `server.log` filled with that line) and nothing listened on 8766. Measured: Homebrew CPython launched from `~/Library/Application Support` **can** read Desktop `server.py` and import REBOUND 5.1.1.
+
+`install-daemon.sh` now writes `~/Library/Application Support/Open Orbital/run-observatory.sh` and a plist whose ProgramArguments are `/bin/sh` plus that trampoline, WorkingDirectory the support folder, exec of the venv’s resolved interpreter (Homebrew, not the Desktop `venv/bin/python` stub). `start.sh` reloads an unhealthy agent and, if :8766 still does not answer, unloads and `nohup`s `run.sh` from the current session. `stop-daemon.sh` also SIGTERMs a leftover observatory listener.
+
+No physics or worker code changed. Historical validation JSON was not modified. Paused/interrupted jobs stay paused (`control=pause`); recover will not auto-resume them.
+
+**Measured after reload.** LaunchAgent `state=running`, `runs=1`, never exited, Python PID 56320 on 127.0.0.1:8766. `GET /api/system`: `daemon=true`, `sleep_prevention=off`, `worker_pid=null`. 11 saved experiments; `cee19b92a783` still paused (36), `60f9f09c5698` still interrupted (38). `start.sh` reuse printed “already running” and kept PID 56320. Browser `/lab`: health strip “up (LaunchAgent)”, Start computation present, no canvas; galaxy tab lists 9 of 11 runs (the two planetary jobs stay on the other tab).
 
 ## Local Git setup (2026-09-16)
 
