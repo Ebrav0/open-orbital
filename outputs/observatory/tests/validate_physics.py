@@ -202,4 +202,11 @@ with tempfile.TemporaryDirectory() as td:
     results['ism_resume_max_state_difference']=float(max(np.max(np.abs(qa-qb)),np.max(np.abs(b['u']-b2['u']))))
     assert np.array_equal(b['type'],b2['type']) and results['ism_resume_max_state_difference']==0.
 
+# peek must not consume the SFR window that the 40-frame energy cadence uses.
+b['born_mass']=3.5;b['born_window_myr']=12.
+_,mpeek=arrays(s);p=stellar.peek(s,b,mpeek)
+assert abs(b['born_mass']-3.5)<1e-12 and p['mean_temperature']>0 and 'hot_gas_mass' in p
+stellar.summary(s,b,mpeek);assert b['born_mass']==0 and b['born_window_myr']==0
+results['peek_preserves_sfr_window']=True
+
 out=Path(__file__).resolve().parents[1]/'validation_r5.json';out.write_text(json.dumps(results,indent=2));print(json.dumps(results,indent=2))

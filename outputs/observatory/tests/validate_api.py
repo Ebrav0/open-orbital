@@ -29,8 +29,8 @@ with tempfile.TemporaryDirectory(prefix='orbital-api-') as td:
         until(lambda:api('/api/system'));return p
     try:
         proc=start()
-        lab=urllib.request.urlopen(URL+'/lab').read().decode();assert '<canvas' not in lab and 'three' not in lab.lower() and 'Start computation' in lab and 'Stop computation' in lab and 'lab.js' in lab and 'id="start-compute"' in lab and 'id="stop-compute"' in lab and 'health-strip' in lab and 'two-phase' in lab.lower()
-        home=urllib.request.urlopen(URL+'/').read().decode();assert 'three.module.js' in home and 'value="1000000"' in home
+        lab=urllib.request.urlopen(URL+'/lab').read().decode();assert '<canvas' not in lab and 'three' not in lab.lower() and 'Start computation' in lab and 'Stop computation' in lab and 'lab.js' in lab and 'id="start-compute"' in lab and 'id="stop-compute"' in lab and 'health-strip' in lab and 'two-phase' in lab.lower() and 'chart-temp' in lab
+        home=urllib.request.urlopen(URL+'/').read().decode();assert 'three.module.js' in home and 'value="1000000"' in home and 'gas-temp' in home
         schema=api('/api/schema');result['n_choices']=schema['schema']['n']['allowed'];assert result['n_choices']==[10000,30000,100000,200000,500000,1000000]
         assert 'ism_enabled' in schema['schema'] and schema['defaults']['ism_enabled'] is True and 'metallicity' in schema['schema']
         expect(400,lambda:api('/api/jobs',dict(mode='galaxy',n=250000)))
@@ -73,6 +73,9 @@ with tempfile.TemporaryDirectory(prefix='orbital-api-') as td:
         assert end['status']['frames']==end['meta']['total_frames'] and api(url+'/frames?start=0')==first and end['status']['computed_time']>3.99
         lc=end['status']['diagnostics']['lifecycle'];assert lc['births_cumulative']>0 and abs(lc['baryon_mass']-2.4)<1e-6
         assert 'mean_temperature' in lc and 'cold_gas_mass' in lc
+        hist=api(url+'/history')['points'];temps=[p.get('mean_temperature') for p in hist if p.get('mean_temperature') is not None]
+        assert hist and temps and max(temps)>0
+        result['history_gas_temperature']=True;result['history_temperature_unique']=len({round(t) for t in temps})
         result.update(pause_frame=count,recovered_frames=end['status']['frames'],recovered_time=end['status']['computed_time'],lifecycle=dict(births=lc['births_cumulative'],deaths=lc['deaths_cumulative'],supernovae=lc['supernovae_cumulative'],counts=lc['counts']))
         expect(400,lambda:api(url+'/frames?start=99999'))
         log=api(url+'/log?tail=10');assert isinstance(log['lines'],list)

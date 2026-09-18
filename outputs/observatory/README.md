@@ -97,7 +97,7 @@ The original revision-1 galaxy run remains available for comparison. It used a c
 - `worker.py`: integration, lifecycle and ISM substeps, versioned frames, controls, transactional checkpoints, 120 h cap.
 - `server.py`: job management, validation schema, estimator, Remove rules and loopback HTTP API.
 - `static/app.js`, `static/index.html`: Observe WebGL viewer and controls.
-- `static/lab.html`, `static/lab.js`, `static/shared.js`: Compute page (no Three.js, no `/frames`; SVG history charts).
+- `static/lab.html`, `static/lab.js`, `static/shared.js`: Compute page (no Three.js, no `/frames`; SVG history charts including gas temperature).
 - `static/style.css`: both pages.
 - `tests/validate_physics.py`, `tests/validate_api.py`, `tests/validate_queue.py`: numerical, recovery, and queue checks (write `*_r5.json` / `queue_validation.json`; never overwrite historical `validation.json` / `validation_r3.json` / `validation_r4.json`).
 

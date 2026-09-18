@@ -3,6 +3,7 @@
 # Clock uses m_star (Msun). Force uses slot mass (code units). N never changes.
 # ISM (ism.py) is not SPH and not MESA. lifecycle_speed is a laboratory clock, not a calibration.
 # Disk occupancy is disk_mask, not a global prefix — required for concatenated [disk|halo|smbh] galaxies.
+# peek() is for per-frame T/phase; summary() also resets the SFR window for the 40-frame energy cadence.
 """Stellar birth, growth and death for the observatory galaxy model."""
 import numpy as np
 import ism
@@ -217,8 +218,8 @@ def step(sim,b,params,dt_model,seed):
         sim.set_serialized_particle_data(m=m)
     if dv:sim.set_serialized_particle_data(xyzvxvyvz=q)
 
-def summary(sim,b,m=None):
-    """Lifecycle diagnostics from current masses; resets the SFR window."""
+def peek(sim,b,m=None):
+    """Lifecycle diagnostics from current masses. Does not reset the SFR window."""
     n=sim.N
     if m is None:
         m=np.empty(n);sim.serialize_particle_data(m=m)
@@ -235,5 +236,10 @@ def summary(sim,b,m=None):
     if 'z_birth' in b and np.any(alive):
         out['mean_stellar_metallicity']=float(np.average(b['z_birth'][alive]/ism.Z_SOLAR,weights=np.maximum(m[alive],1e-30)))
     out.update(ism.summary_fields(b,m))
+    return out
+
+def summary(sim,b,m=None):
+    """Lifecycle diagnostics; resets the SFR window used by the expensive energy cadence."""
+    out=peek(sim,b,m)
     b['born_mass']=0.;b['born_window_myr']=0.
     return out

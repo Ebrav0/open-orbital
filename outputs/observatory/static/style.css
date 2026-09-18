@@ -75,7 +75,7 @@
 .pause-eta{margin:10px 0 0;padding:10px 12px;border:1px solid #7a6a34;background:#241c0f;border-radius:6px;color:#e6cf8a;font-size:11px;line-height:1.65}
 .lab-setup .micro,.lab-actions .micro,.lab-status .micro{font-size:10px;color:#73818e;line-height:1.6;margin:8px 0 0}
 
-.history-charts{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin-top:10px}
+.history-charts{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin-top:10px}
 .history-charts figure{margin:0;min-width:0}
 .history-charts figcaption{font-size:9px;letter-spacing:1px;color:#7c9a8b;margin-bottom:4px}
 .sparkline{width:100%;height:64px;background:#0a1016;border-radius:6px;border:1px solid #1c252e}
