@@ -1,16 +1,17 @@
-# AGENT MAP: collisionless baryon lifecycle. Gas -> protostar -> MS -> giant -> WD/NS/BH.
+# AGENT MAP: baryon lifecycle + optional grid ISM. Gas/hot → protostar → MS → giant → WD/NS/BH.
 # Gravity always uses the current REBOUND slot masses; this module changes those masses.
 # Clock uses m_star (Msun). Force uses slot mass (code units). N never changes.
-# Not hydro, not MESA. lifecycle_speed is a laboratory clock, not a calibration.
+# ISM (ism.py) is not SPH and not MESA. lifecycle_speed is a laboratory clock, not a calibration.
 # Disk occupancy is disk_mask, not a global prefix — required for concatenated [disk|halo|smbh] galaxies.
 """Stellar birth, growth and death for the observatory galaxy model."""
 import numpy as np
+import ism
 
 # Galaxy code units: G=1, mass 1e10 Msun, length 3 kpc. Derived time and velocity units.
 MYR_PER_TIME=24.50          # one code time unit in Myr
 V_KMS=119.7                 # one code velocity unit in km/s
-GAS,PROTO,MS,GIANT,WD,NS,BH,HALO,SMBH=range(9)
-TYPE_NAMES=['gas','protostar','main_sequence','giant','white_dwarf','neutron_star','black_hole','halo','smbh']
+GAS,PROTO,MS,GIANT,WD,NS,BH,HALO,SMBH,HOT=range(10)
+TYPE_NAMES=['gas','protostar','main_sequence','giant','white_dwarf','neutron_star','black_hole','halo','smbh','hot_gas']
 CELL=.15                    # density grid cell in code lengths (~450 pc)
 
 def kroupa_masses(rng,n,mmin=.08,mmax=100.):
@@ -73,30 +74,42 @@ def new_baryons(rng,n,disk_mask,params):
             cand=rng.uniform(0,8000,ns);alive=cand<.95*tms
             ages=np.where(alive,cand,tms*rng.uniform(.05,.95,ns))
             types[a+ng:b]=np.where(ages>=.9*tms,GIANT,MS);m_star[a+ng:b]=ms;age[a+ng:b]=ages;birth[a+ng:b]=-ages/MYR_PER_TIME
-    return dict(type=types,age=age,m_star=m_star,birth_time=birth,disk_mask=disk_mask.copy(),disk_count=int(np.sum(disk_mask)),debt=0.,born_mass=0.,born_window_myr=0.,supernovae=0,deaths=0,births=0,failed_return=0.)
+    b=dict(type=types,age=age,m_star=m_star,birth_time=birth,disk_mask=disk_mask.copy(),disk_count=int(np.sum(disk_mask)),debt=0.,born_mass=0.,born_window_myr=0.,supernovae=0,deaths=0,births=0,failed_return=0.)
+    ism.attach(b,params)
+    return b
 
 def save_baryons(path,b):
     mask=b.get('disk_mask')
     if mask is None:
         mask=np.zeros(len(b['type']),np.uint8);mask[:int(b['disk_count'])]=1
-    np.savez(path,type=b['type'],age=b['age'],m_star=b['m_star'],birth_time=b['birth_time'],disk_mask=np.asarray(mask,dtype=np.uint8),scalars=np.array([b['disk_count'],b['debt'],b['born_mass'],b['born_window_myr'],b['supernovae'],b['deaths'],b['births'],b['failed_return']],dtype=np.float64))
+    scalars=np.array([b['disk_count'],b['debt'],b['born_mass'],b['born_window_myr'],b['supernovae'],b['deaths'],b['births'],b['failed_return'],
+                      b.get('metals_produced',0.),b.get('sn_heat',0.),b.get('shock_heat',0.)],dtype=np.float64)
+    kw=dict(type=b['type'],age=b['age'],m_star=b['m_star'],birth_time=b['birth_time'],disk_mask=np.asarray(mask,dtype=np.uint8),scalars=scalars)
+    for k in ('u','Z','cool_delay','z_birth'):
+        if k in b:kw[k]=np.asarray(b[k])
+    np.savez(path,**kw)
 
 def load_baryons(path):
     z=np.load(path);s=z['scalars'];n=len(z['type']);disk_count=int(s[0])
     if 'disk_mask' in z.files:mask=z['disk_mask'].astype(np.uint8)
     else:
         mask=np.zeros(n,np.uint8);mask[:disk_count]=1
-    return dict(type=z['type'].astype(np.uint8),age=z['age'],m_star=z['m_star'],birth_time=z['birth_time'],disk_mask=mask,disk_count=disk_count,debt=float(s[1]),born_mass=float(s[2]),born_window_myr=float(s[3]),supernovae=int(s[4]),deaths=int(s[5]),births=int(s[6]),failed_return=float(s[7]))
+    b=dict(type=z['type'].astype(np.uint8),age=z['age'],m_star=z['m_star'],birth_time=z['birth_time'],disk_mask=mask,disk_count=disk_count,debt=float(s[1]),born_mass=float(s[2]),born_window_myr=float(s[3]),supernovae=int(s[4]),deaths=int(s[5]),births=int(s[6]),failed_return=float(s[7]),
+           metals_produced=float(s[8]) if len(s)>8 else 0.,sn_heat=float(s[9]) if len(s)>9 else 0.,shock_heat=float(s[10]) if len(s)>10 else 0.)
+    for k in ('u','Z','cool_delay','z_birth'):
+        if k in z.files:b[k]=z[k].astype(np.float64)
+    ism.attach(b,{})
+    return b
 
 def _cells(pos):
     """Integer cell key per row; keys are sortable int64 from a shifted 3D grid."""
     ijk=np.floor(pos/CELL).astype(np.int64)+(1<<20)
     return (ijk[:,0]<<42)|(ijk[:,1]<<21)|ijk[:,2]
 
-def _neighbour_gas(key,gas_keys_sorted,gas_order):
-    """Indices (into gas arrays) of gas in the same cell, else the 26 surrounding cells."""
+def _neighbour_idx(key,keys_sorted,order):
+    """Indices (into the keyed arrays) of members in the same cell, else the 26 surrounding cells."""
     def lookup(k):
-        lo=np.searchsorted(gas_keys_sorted,k,'left');hi=np.searchsorted(gas_keys_sorted,k,'right');return gas_order[lo:hi]
+        lo=np.searchsorted(keys_sorted,k,'left');hi=np.searchsorted(keys_sorted,k,'right');return order[lo:hi]
     found=lookup(key)
     if len(found):return found
     out=[]
@@ -108,29 +121,32 @@ def _neighbour_gas(key,gas_keys_sorted,gas_order):
     return np.concatenate(out) if out else found
 
 def step(sim,b,params,dt_model,seed):
-    """Advance the lifecycle by one gravity step. Mutates REBOUND masses and (for kicks) velocities in place."""
+    """Advance the lifecycle by one gravity step. Mutates REBOUND masses and (for kicks/ISM) velocities in place."""
     speed=float(params['lifecycle_speed']);dt_myr=dt_model*MYR_PER_TIME*speed
     types=b['type'];age=b['age'];m_star=b['m_star']
     rng=np.random.default_rng([int(seed)&0xffffffff,int(sim.steps_done)&0xffffffff])
     n=sim.N;q=np.empty((n,6));m=np.empty(n);sim.serialize_particle_data(xyzvxvyvz=q,m=m)
-    pos=q[:,:3];dm=np.zeros(n);dv=None;changed=False
-    gas_idx=np.flatnonzero(types==GAS)
-    gas_keys=None;gas_order=None
-    if len(gas_idx):
-        keys=_cells(pos[gas_idx]);gas_order=np.argsort(keys,kind='stable');gas_keys=keys[gas_order]
+    pos=q[:,:3];dm=np.zeros(n);metal_add=np.zeros(n);dv=False;changed=False
+    ism.attach(b,params)
+    gas_all=np.flatnonzero(ism.is_gas(types));cold=np.flatnonzero(types==GAS)
+    gas_keys=None;gas_order=None;cold_keys=None;cold_order=None
+    if len(gas_all):
+        keys=_cells(pos[gas_all]);gas_order=np.argsort(keys,kind='stable');gas_keys=keys[gas_order]
+    if len(cold):
+        ckeys=_cells(pos[cold]);cold_order=np.argsort(ckeys,kind='stable');cold_keys=ckeys[cold_order]
     # ---- aging ----
     alive=(types>=PROTO)&(types<=GIANT)
     age[alive]+=dt_myr
     tms=lifetime_myr(np.where(alive,m_star,1.))
-    # protostar -> MS
+    # protostar -> MS; accrete only from cold gas
     grow=np.flatnonzero(types==PROTO)
-    if len(grow) and len(gas_idx) and float(params['grow_rate'])>0:
+    if len(grow) and len(cold) and float(params['grow_rate'])>0:
         rate=float(params['grow_rate'])*dt_myr
         pkeys=_cells(pos[grow])
         for gi,key in zip(grow,pkeys):
-            nb=_neighbour_gas(key,gas_keys,gas_order)
+            nb=_neighbour_idx(key,cold_keys,cold_order)
             if not len(nb):continue
-            src=gas_idx[nb];avail=m[src]+dm[src];want=min(float(avail.sum())*.5,m[gi]*rate)
+            src=cold[nb];avail=m[src]+dm[src];want=min(float(avail.sum())*.5,m[gi]*rate)
             if want<=0:continue
             take=avail/avail.sum()*want;dm[src]-=take;dm[gi]+=want;changed=True
     done=grow[age[grow]>=prems_myr(m_star[grow])] if len(grow) else grow
@@ -139,43 +155,65 @@ def step(sim,b,params,dt_model,seed):
     ms_idx=np.flatnonzero(types==MS);to_giant=ms_idx[age[ms_idx]>=.9*tms[ms_idx]];types[to_giant]=GIANT
     # giant -> remnant
     giants=np.flatnonzero(types==GIANT);dying=giants[age[giants]>=tms[giants]]
-    kick_kms=float(params['sn_kick_kms'])
+    kick_kms=float(params['sn_kick_kms']);ism_on=bool(params.get('ism_enabled',False))
     if len(dying):
         rtype,rmass=remnant_of(m_star[dying]);frac=np.clip(rmass/np.maximum(m_star[dying],1e-6),0,1)
         slot=m[dying]+dm[dying];ejecta=slot*(1-frac)
-        dkeys=_cells(pos[dying]) if len(gas_idx) else None
+        dkeys=_cells(pos[dying]) if len(gas_all) else None
         kicks=[]
         for j,(di,e) in enumerate(zip(dying,ejecta)):
             if e>0:
-                nb=_neighbour_gas(dkeys[j],gas_keys,gas_order) if len(gas_idx) else np.empty(0,np.int64)
+                nb=_neighbour_idx(dkeys[j],gas_keys,gas_order) if len(gas_all) else np.empty(0,np.int64)
                 if len(nb):
-                    src=gas_idx[nb];dm[src]+=e/len(src);dm[di]-=e
+                    src=gas_all[nb];dm[src]+=e/len(src);dm[di]-=e
+                    y=ism.YIELD_SN if m_star[di]>=8 else ism.YIELD_AGB
+                    metal_add[src]+=y*e/len(src);b['metals_produced']=float(b.get('metals_produced',0)+y*e)
+                    if ism_on and m_star[di]>=8:ism.deposit_heat(b,m+dm,src,e,params)
                 else:b['failed_return']+=float(e)
             if rtype[j] in (NS,BH) and kick_kms>0:kicks.append(di)
         types[dying]=rtype;b['deaths']+=len(dying);b['supernovae']+=int(np.sum(m_star[dying]>=8));changed=True
         if kicks:
             kicks=np.array(kicks);dirs=rng.normal(size=(len(kicks),3));dirs/=np.linalg.norm(dirs,axis=1)[:,None]
             q[kicks,3:]+=dirs*(kick_kms/V_KMS);dv=True
+    # mix metals into gas before masses are written
+    if np.any(metal_add) or np.any(dm):
+        gas=ism.is_gas(types)
+        m_old=m+0.
+        # Z is metal mass fraction of the current slot mass
+        if np.any(gas):
+            metal=b['Z']*m_old;metal+=metal_add
+            m_new=np.maximum(m_old+dm,0.)
+            nz=gas&(m_new>1e-18)
+            b['Z'][nz]=metal[nz]/m_new[nz]
     # ---- birth ----
-    gas_mass=float(np.sum(m[gas_idx]+dm[gas_idx])) if len(gas_idx) else 0.
     t_sf_myr=max(float(params['t_sf'])*1000.,1.)
-    if gas_mass>0:
-        b['debt']+=gas_mass/t_sf_myr*dt_myr   # dt_myr already carries lifecycle_speed
-        slot_mass=gas_mass/len(gas_idx);k=int(min(b['debt']//slot_mass,len(gas_idx)))
+    m_eff=m+dm
+    if ism_on:
+        eligible=np.flatnonzero(ism.star_forming(pos,q[:,3:],m_eff,b['u'],types,params))
+    else:
+        eligible=np.flatnonzero(types==GAS)
+    pool_mass=float(np.sum(m_eff[eligible])) if len(eligible) else 0.
+    if pool_mass>0:
+        b['debt']+=pool_mass/t_sf_myr*dt_myr
+        slot_mass=pool_mass/len(eligible);k=int(min(b['debt']//slot_mass,len(eligible)))
         if k>0:
-            cell_index=np.searchsorted(gas_keys,_cells(pos[gas_idx]))
-            counts=np.bincount(cell_index,minlength=len(gas_keys)+1);density=counts[cell_index].astype(np.float64)
+            ekeys=_cells(pos[eligible]);eord=np.argsort(ekeys,kind='stable');ek=ekeys[eord]
+            cell_index=np.searchsorted(ek,ekeys);counts=np.bincount(cell_index,minlength=len(ek)+1);density=counts[cell_index].astype(np.float64)
             rank=np.argsort(np.argsort(density))/max(len(density)-1,1)
             bias=float(params['sf_density_bias']);score=bias*rank+(1-bias)*rng.random(len(density))
-            pick=gas_idx[np.argpartition(-score,k-1)[:k]] if k<len(gas_idx) else gas_idx
-            born_mass=float(np.sum(m[pick]+dm[pick]));b['debt']-=born_mass;b['born_mass']+=born_mass;b['births']+=len(pick)
+            pick=eligible[np.argpartition(-score,k-1)[:k]] if k<len(eligible) else eligible
+            born_mass=float(np.sum(m_eff[pick]));b['debt']-=born_mass;b['born_mass']+=born_mass;b['births']+=len(pick)
             ms=kroupa_masses(rng,len(pick),params['imf_mmin'],params['imf_mmax'])
             m_star[pick]=ms;age[pick]=0.;b['birth_time'][pick]=sim.t
+            if 'z_birth' in b:b['z_birth'][pick]=b['Z'][pick]
             types[pick]=np.where(ms>=2.,PROTO,MS)
     b['born_window_myr']+=dt_myr
+    # ---- ISM hydro / cooling / ram (after mass return, before writeback) ----
+    if ism_on:
+        if ism.step(q,m_eff,b,params,dt_model):dv=True
     # ---- write back ----
     if changed and np.any(dm):
-        m+=dm;m[:]=np.maximum(m,0.)
+        m=np.maximum(m+dm,0.)
         sim.set_serialized_particle_data(m=m)
     if dv:sim.set_serialized_particle_data(xyzvxvyvz=q)
 
@@ -188,10 +226,14 @@ def summary(sim,b,m=None):
     if mask is None:
         mask=np.zeros(n,dtype=bool);mask[:int(b['disk_count'])]=True
     else:mask=np.asarray(mask,dtype=bool)
-    counts={TYPE_NAMES[i]:int(np.sum(t==i)) for i in range(9)}
+    counts={TYPE_NAMES[i]:int(np.sum(t==i)) for i in range(len(TYPE_NAMES))}
     alive=(t>=PROTO)&(t<=GIANT)
-    out=dict(gas_mass=float(np.sum(m[t==GAS])),stellar_mass=float(np.sum(m[alive])),remnant_mass=float(np.sum(m[(t>=WD)&(t<=BH)])),counts=counts,
+    gas_mass=float(np.sum(m[ism.is_gas(t)]))
+    out=dict(gas_mass=gas_mass,stellar_mass=float(np.sum(m[alive])),remnant_mass=float(np.sum(m[(t>=WD)&(t<=BH)])),counts=counts,
       sfr=float(b['born_mass']/b['born_window_myr']) if b['born_window_myr']>0 else 0.,mean_stellar_age=float(np.mean(b['age'][alive])) if np.any(alive) else 0.,
       supernovae_cumulative=int(b['supernovae']),deaths_cumulative=int(b['deaths']),births_cumulative=int(b['births']),mass_return_failed=float(b['failed_return']),baryon_mass=float(np.sum(m[mask])))
+    if 'z_birth' in b and np.any(alive):
+        out['mean_stellar_metallicity']=float(np.average(b['z_birth'][alive]/ism.Z_SOLAR,weights=np.maximum(m[alive],1e-30)))
+    out.update(ism.summary_fields(b,m))
     b['born_mass']=0.;b['born_window_myr']=0.
     return out

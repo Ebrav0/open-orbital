@@ -63,6 +63,7 @@ def run(folder):
                 atomic(folder/'status.json',status)
             here=Path(__file__).parent
             shutil.copy2(here/'physics.py',folder/'model_source.py');shutil.copy2(here/'stellar.py',folder/'stellar_source.py')
+            if (here/'ism.py').exists():shutil.copy2(here/'ism.py',folder/'ism_source.py')
             if config['mode']=='galaxy':s,meta,baryons=galaxy(**{k:v for k,v in config.items() if k in GALAXY_DEFAULTS})
             else:s,meta,baryons=planets(config.get('jupiter_mass',1),config.get('planet_mass_scale'),config.get('perturber_mass',0),config.get('perturber_a',2.5))
             gix=meta.pop('_galaxy_index',None)
@@ -98,7 +99,9 @@ def run(folder):
                      disk_half_radius=d.get('disk_half_radius'),halo_half_radius=d.get('halo_half_radius'),
                      angular_change=d.get('angular_change'),energy_change=d.get('energy_change'),
                      sfr=lc.get('sfr'),births=lc.get('births_cumulative'),deaths=lc.get('deaths_cumulative'),
-                     supernovae=lc.get('supernovae_cumulative'),counts=lc.get('counts'))
+                     supernovae=lc.get('supernovae_cumulative'),counts=lc.get('counts'),
+                     mean_temperature=lc.get('mean_temperature'),cold_gas_mass=lc.get('cold_gas_mass'),hot_gas_mass=lc.get('hot_gas_mass'),
+                     mean_metallicity=lc.get('mean_metallicity'))
             with (folder/'diagnostics.jsonl').open('a') as hf:hf.write(json.dumps(rec)+'\n')
         def requested_action():
             try:return json.loads((folder/'control.json').read_text()).get('action')
@@ -179,6 +182,7 @@ def run(folder):
                     if lc:
                         if lc['supernovae_cumulative']>0 and not status['flags'].get('first_sn'):status['flags']['first_sn']=True;note(f'First supernova at {s.t*meta["time_scale"]:.0f} Myr.')
                         if lc['gas_mass']<=0 and not status['flags'].get('gas_gone'):status['flags']['gas_gone']=True;note(f'Gas reservoir exhausted at {s.t*meta["time_scale"]:.0f} Myr; star formation stops.')
+                        if lc.get('hot_gas_mass',0)>0 and not status['flags'].get('hot_gas'):status['flags']['hot_gas']=True;note(f'Hot ionized gas appeared at {s.t*meta["time_scale"]:.0f} Myr (T ≳ 1.2×10⁵ K). Blastwave delay holds supernova heat.')
                 if config['mode']=='galaxy' or index%20==0 or index==len(meta['times'])-1:atomic(folder/'status.json',status)
                 append_history()
                 if time.monotonic()-last_checkpoint>15:checkpoint();last_checkpoint=time.monotonic()

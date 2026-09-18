@@ -1,5 +1,21 @@
 # Agent handoff — Open Orbital
 
+## Two-phase ISM (model revision 5) — 2026-09-18
+
+Added a laboratory two-phase ISM on the existing O(N) density grid. Gas parcels now carry specific internal energy and metallicity. After every leapfrog step they can feel grid pressure, ram drag, CIE-like cooling Λ(T,Z), and Stinson-like delayed supernova heat. Star formation may only consume cold, dense, non-expanding gas. This is **not SPH**. Isolated `n_galaxies=1` collisionless ICs are unchanged (same DF; generator stamped 5). Historical validation JSON was not rewritten.
+
+**Knobs (Compute, group Interstellar medium).** `ism_enabled` (default on with the lifecycle), `metallicity` (Z/Z☉), `cooling_speed`, `sn_feedback`, `ram_pressure`, `n_sf`. Lifecycle-off jobs never run the ISM. Draft key `orbital-lab-draft-v3`. Estimator ×1.12 when ISM+lifecycle (prediction, not a measured point).
+
+**Files.** `ism.py` (new); `stellar.py` type 9 = hot/ionized gas, baryon arrays `u`/`Z`/`cool_delay`/`z_birth`; worker archives `ism_source.py`; Observe paints hot gas rose; Compute shows T, cold/hot mass, Z.
+
+**Measured.** `PYTHONPATH="$PWD/work/openmp:$PWD/outputs/observatory" work/venv/bin/python outputs/observatory/tests/validate_physics.py` → `validation_r5.json` (62 s, pip rebound 5.1.1, no OpenMP tree). Isolated vs `n_galaxies=1` max |Δstate| = 0; vs `origin/main` revision-3 `physics.py` max |Δstate| = 0. Lifecycle-off 2048 energy 4.40e-5 / 5.69e-6 (same bounds as r3/r4). Lifecycle-off-ISM speed-40 500 steps: mass drift 0.0, 307 births, 60 deaths, 5 SN (matches this cloud’s serial r4). Cooling curve metal-line peak at 2.47×10^5 K; delayed parcels stay at 5×10^5 K while undelayed drop to the 8×10^3 K floor. Two approaching clumps: gas momentum drift 0, v_rel 2.4 → 1.02. Hot gas rejected for SF. ISM+lifecycle 80 steps: mass drift 0.0, mean T 9742 K. Two-galaxy ISM 40 steps: mass drift 1.7e-16, finite, hot gas mass 0.007. ISM checkpoint resume max |Δstate| = 0. Historical `validation.json` / r3 / r4 mtimes unchanged.
+
+**API / browser.** Pending this session on isolated 8767 and Compute/Observe.
+
+**Outstanding / honest limits.** Superparticles; no SPH kernel or Riemann solver; SN coupling is a laboratory parameter; blast delay is 15 simulation Myr, not the stellar clock, so `lifecycle_speed=40` can keep overlapping blastwaves; unresolved CNM is an 8e3 K floor; not a calibrated MW ISM. Energy change with ISM on is not an error bound. No 1M science job was started. Live 8766 was not running in this cloud workspace.
+
+## Rebase onto collision lab (2026-09-17)
+
 ## Rebase onto collision lab (2026-09-17)
 
 Kept origin/main 2–5 clone-galaxy physics (`build_one_galaxy` / `place_galaxy`, draft `orbital-lab-draft-v2`). Overlay: 1,000,000 particle stops, `MAX_RUNS=24`, Barnes–Hut `apply_tree_box`, LaunchAgent trampoline, lined-up Compute control room, Observe byte-capped frame cache. Resume after a daemon restart now `spawn()`s a paused job (adopt if the worker is still alive). Historical `validation.json` / r3 JSON were not rewritten. Library on 8766 is empty (`GET /api/jobs` `[]`); `PROTECTED` ids still refuse API DELETE if recreated.

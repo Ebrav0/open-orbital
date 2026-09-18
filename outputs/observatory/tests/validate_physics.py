@@ -1,11 +1,12 @@
-"""Numerical checks for model revision 4. Writes validation_r4.json; never overwrites validation.json or validation_r3.json."""
+"""Numerical checks for model revision 5. Writes validation_r5.json; never overwrites validation.json, validation_r3.json or validation_r4.json."""
 import sys,json,time,tempfile,importlib.util,subprocess
 from pathlib import Path
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
 import numpy as np
 from physics import planets,galaxy,diagnostics,arrays,set_threads,rebound,MODEL_REVISION,split_particle_counts
-import stellar
+import stellar,ism
 set_threads(4);results=dict(model_revision=MODEL_REVISION)
+assert MODEL_REVISION==5
 s,m,_=planets();e=s.energy();s.integrate(50);results['solar_50_year_energy_change']=abs(s.energy()/e-1)
 assert results['solar_50_year_energy_change']<1e-9
 s,m,_=planets(planet_mass_scale=[1,1,1,1,3,1,1,1],perturber_mass=.002,perturber_a=3.);assert s.N==10 and m['n']==10;e=s.energy();s.integrate(12);results['perturbed_12_year_energy_change']=abs(s.energy()/e-1)
@@ -63,7 +64,7 @@ masses=np.geomspace(.08,150,200);life=stellar.lifetime_myr(masses);assert np.all
 rt,rm=stellar.remnant_of(np.array([1.,5.,8.,15.,20.,60.]));assert list(rt)==[stellar.WD,stellar.WD,stellar.NS,stellar.NS,stellar.BH,stellar.BH] and np.all(rm<np.array([1.,5.,8.,15.,20.,60.]))
 imf=stellar.kroupa_masses(np.random.default_rng(1),200000,.08,100.);results['kroupa_sample']=dict(min=float(imf.min()),max=float(imf.max()),median=float(np.median(imf)),fraction_above_8=float(np.mean(imf>=8)))
 assert .08<=imf.min() and imf.max()<=100. and .15<np.median(imf)<.6 and .002<results['kroupa_sample']['fraction_above_8']<.02
-s,m,b=galaxy(2048,lifecycle_speed=40,gas_fraction=.5,t_sf=.5,sn_kick_kms=50);P=m['params'];_,m0=arrays(s);M0=float(m0.sum());base=float(np.sum(m0[:m['disk_count']]))
+s,m,b=galaxy(2048,lifecycle_speed=40,gas_fraction=.5,t_sf=.5,sn_kick_kms=50,ism_enabled=False);P=m['params'];_,m0=arrays(s);M0=float(m0.sum());base=float(np.sum(m0[:m['disk_count']]))
 t=time.perf_counter()
 for i in range(500):
     s.steps(1);stellar.step(s,b,P,s.dt,P['seed'])
@@ -77,6 +78,7 @@ assert np.all(b['type'][m['disk_count']:]==stellar.HALO)
 with tempfile.TemporaryDirectory() as td:
     stellar.save_baryons(Path(td)/'b.npz',b);b2=stellar.load_baryons(Path(td)/'b.npz');s.save_to_file(str(Path(td)/'c.bin'));r=rebound.Simulation(str(Path(td)/'c.bin'))
     assert all(np.array_equal(b[k],b2[k]) for k in('type','age','m_star','birth_time','disk_mask')) and b2['supernovae']==b['supernovae']
+    assert 'u' in b2 and 'Z' in b2
     for i in range(20):
         s.steps(1);stellar.step(s,b,P,s.dt,P['seed']);r.steps(1);stellar.step(r,b2,P,r.dt,P['seed'])
     _,ma=arrays(s);_,mb=arrays(r);results['resume_rng_max_mass_difference']=float(np.max(np.abs(ma-mb)));assert np.array_equal(b['type'],b2['type']) and results['resume_rng_max_mass_difference']==0.
@@ -106,7 +108,7 @@ d5=diagnostics(s5,m5);assert d5['finite']
 results['five_galaxy_4096']=dict(slices=[g['n'] for g in m5['galaxies']],finite=d5['finite'])
 
 # Encounter lifecycle: mass conserved, disk_mask length N, halo/SMBH never become stars.
-s,m,b=galaxy(2048,n_galaxies=2,lifecycle_speed=40,gas_fraction=.5,t_sf=.5)
+s,m,b=galaxy(2048,n_galaxies=2,lifecycle_speed=40,gas_fraction=.5,t_sf=.5,ism_enabled=False)
 P=m['params'];_,m0=arrays(s);M0=float(m0.sum());mask=b['disk_mask'].astype(bool)
 assert len(b['disk_mask'])==2048 and int(mask.sum())==m['disk_count']
 for i in range(200):
@@ -125,4 +127,79 @@ lz_a,lz_b=Lz(s,meta['galaxies'][0]),Lz(s,meta['galaxies'][1])
 results['retrograde_Lz']=dict(A=lz_a,B=lz_b)
 assert lz_a*lz_b<0
 
-out=Path(__file__).resolve().parents[1]/'validation_r4.json';out.write_text(json.dumps(results,indent=2));print(json.dumps(results,indent=2))
+# ---- ISM (revision 5) ----
+T=np.logspace(4,6.2,80);L=ism.cooling_lambda(T,1.);L0=ism.cooling_lambda(T,.05)
+results['cooling_peak_K']=float(T[np.argmax(L)])
+assert 1e5<results['cooling_peak_K']<1e6 and float(L.max())>float(L0.max())  # metal-line peak
+T4,mu4=ism.temperature(ism.u_from_T(1e4))
+results['temperature_roundtrip_1e4']=float(T4) if np.ndim(T4)==0 else float(np.mean(T4))
+assert abs(float(np.mean(T4))-1e4)<800
+# Dense hot parcel cools toward the warm floor; delayed particles do not.
+s=rebound.Simulation();s.G=1;s.gravity='none';s.dt=.02
+pos=np.zeros((12,3));vel=np.zeros((12,3));mass=np.full(12,.002)
+# pack them into one cell so n_H is high
+pos[:,0]=np.linspace(0,.04,12)
+q=np.c_[pos,vel]
+for i in range(12):s.add(m=mass[i],x=pos[i,0],y=0,z=0)
+b=dict(type=np.zeros(12,np.uint8),age=np.zeros(12),m_star=np.zeros(12),birth_time=np.zeros(12),disk_mask=np.ones(12,np.uint8),disk_count=12,debt=0.,born_mass=0.,born_window_myr=0.,supernovae=0,deaths=0,births=0,failed_return=0.)
+ism.attach(b,dict(metallicity=1.,cooling_speed=1.,ram_pressure=0.,sn_feedback=0.,n_sf=.1,ism_enabled=True))
+b['u'][:]=ism.u_from_T(5e5);b['cool_delay'][:6]=40.
+q,_m=arrays(s)
+ism.step(q,_m,b,dict(cooling_speed=1.,ram_pressure=0.,sn_feedback=0.,n_sf=.1,ism_enabled=True,metallicity=1.),.02)
+T_after,_=ism.temperature(b['u'])
+results['cooling_delay_holds_hot']=float(np.mean(T_after[:6]));results['cooling_undelayed_drops']=float(np.mean(T_after[6:]))
+assert results['cooling_delay_holds_hot']>1e5 and results['cooling_undelayed_drops']<results['cooling_delay_holds_hot']*.8
+# Ram: two approaching clumps, gravity off. Momentum conserved, relative speed drops, some heat.
+s=rebound.Simulation();s.G=1;s.gravity='none';s.dt=.02
+n=16;pos=np.zeros((n,3));vel=np.zeros((n,3));mass=np.full(n,.001)
+pos[:8,0]=0;pos[8:,0]=ism.CELL;vel[:8,0]=1.2;vel[8:,0]=-1.2
+for i in range(n):s.add(m=mass[i],x=pos[i,0],y=0,z=0,vx=vel[i,0])
+b=dict(type=np.zeros(n,np.uint8),age=np.zeros(n),m_star=np.zeros(n),birth_time=np.zeros(n),disk_mask=np.ones(n,np.uint8),disk_count=n,debt=0.,born_mass=0.,born_window_myr=0.,supernovae=0,deaths=0,births=0,failed_return=0.)
+ism.attach(b,dict(metallicity=1.))
+q0,m0=arrays(s);px0=float(np.sum(m0*q0[:,3]));u0=float(np.mean(b['u']));vrel0=float(np.mean(q0[:8,3])-np.mean(q0[8:,3]))
+ism.step(q0,m0,b,dict(cooling_speed=0.,ram_pressure=1.,sn_feedback=0.,n_sf=.1,ism_enabled=True,metallicity=1.),.02)
+s.set_serialized_particle_data(xyzvxvyvz=q0)
+q1,m1=arrays(s);px1=float(np.sum(m1*q1[:,3]));vrel1=float(np.mean(q1[:8,3])-np.mean(q1[8:,3]))
+results['ram_momentum_drift']=abs(px1-px0);results['ram_vrel0']=vrel0;results['ram_vrel1']=vrel1;results['ram_u_ratio']=float(np.mean(b['u'])/u0)
+assert results['ram_momentum_drift']<1e-8 and vrel1<vrel0 and np.all(np.isfinite(q1))
+# Hot gas is not eligible for star formation.
+types=np.zeros(32,np.uint8);types[16:]=ism.HOT
+pos=np.zeros((32,3));vel=np.zeros((32,3));mass=np.full(32,.01);u=np.full(32,ism.u_from_T(1e4));u[16:]=ism.u_from_T(8e5)
+pos[:,0]=np.linspace(0,.02,32)
+sf=ism.star_forming(pos,vel,mass,u,types,dict(n_sf=.01))
+assert np.any(sf[:16]) and not np.any(sf[16:])
+results['sf_rejects_hot']=True
+# Full galaxy with ISM on: mass conserved, finite, u/Z present, types valid.
+s,m,b=galaxy(2048,lifecycle_speed=40,gas_fraction=.5,t_sf=.5,ism_enabled=True,sn_feedback=.2,ram_pressure=1.,cooling_speed=1.)
+P=m['params'];_,m0=arrays(s);M0=float(m0.sum());assert 'u' in b and 'Z' in b and m['ism_enabled'] and m['model_revision']==5
+for i in range(80):
+    s.steps(1);stellar.step(s,b,P,s.dt,P['seed'])
+_,m1=arrays(s);d=diagnostics(s,m,b);lc=d['lifecycle']
+results['ism_lifecycle_80']=dict(mass_drift=abs(float(m1.sum())-M0)/M0,finite=d['finite'],mean_T=lc.get('mean_temperature'),hot_mass=lc.get('hot_gas_mass'),cold_mass=lc.get('cold_gas_mass'),births=lc.get('births_cumulative'),Z=lc.get('mean_metallicity'),counts=lc.get('counts'))
+print(results['ism_lifecycle_80'],flush=True)
+assert d['finite'] and results['ism_lifecycle_80']['mass_drift']<1e-6 and np.all(m1>=0)
+assert np.all(np.isin(b['type'],np.arange(10))) and np.all(b['type'][m['disk_count']:]==stellar.HALO)
+assert lc['mean_temperature']>0 and abs((lc['cold_gas_mass']+lc['hot_gas_mass'])-lc['gas_mass'])<1e-9
+# Two-galaxy ISM still conserves mass and stays finite.
+s,m,b=galaxy(2048,n_galaxies=2,lifecycle_speed=40,gas_fraction=.5,t_sf=.5,ism_enabled=True)
+P=m['params'];_,m0=arrays(s);M0=float(m0.sum())
+for i in range(40):
+    s.steps(1);stellar.step(s,b,P,s.dt,P['seed'])
+_,m1=arrays(s);d=diagnostics(s,m,b)
+results['two_galaxy_ism_40']=dict(mass_drift=abs(float(m1.sum())-M0)/M0,finite=d['finite'],sep=d['encounter']['separation_12'],hot=d['lifecycle'].get('hot_gas_mass'))
+assert results['two_galaxy_ism_40']['mass_drift']<1e-6 and d['finite']
+# ISM resume: u, Z and velocities match after checkpoint.
+s,m,b=galaxy(1024,lifecycle_speed=20,gas_fraction=.4,t_sf=.8,ism_enabled=True,sn_feedback=.1)
+P=m['params']
+for i in range(15):
+    s.steps(1);stellar.step(s,b,P,s.dt,P['seed'])
+with tempfile.TemporaryDirectory() as td:
+    stellar.save_baryons(Path(td)/'b.npz',b);b2=stellar.load_baryons(Path(td)/'b.npz');s.save_to_file(str(Path(td)/'c.bin'));r=rebound.Simulation(str(Path(td)/'c.bin'))
+    assert np.allclose(b['u'],b2['u']) and np.allclose(b['Z'],b2['Z'])
+    for i in range(12):
+        s.steps(1);stellar.step(s,b,P,s.dt,P['seed']);r.steps(1);stellar.step(r,b2,P,r.dt,P['seed'])
+    qa,_=arrays(s);qb,_=arrays(r)
+    results['ism_resume_max_state_difference']=float(max(np.max(np.abs(qa-qb)),np.max(np.abs(b['u']-b2['u']))))
+    assert np.array_equal(b['type'],b2['type']) and results['ism_resume_max_state_difference']==0.
+
+out=Path(__file__).resolve().parents[1]/'validation_r5.json';out.write_text(json.dumps(results,indent=2));print(json.dumps(results,indent=2))
