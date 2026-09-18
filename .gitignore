@@ -9,6 +9,8 @@ work/observatory-data/
 
 # Generated logs, browser traces, caches, and local secrets
 work/*.log
+# macOS `sample` dumps from CPU diagnosis (tens of thousands of stack frames)
+work/cpu-sample*.txt
 .playwright-cli/
 **/__pycache__/
 *.py[cod]

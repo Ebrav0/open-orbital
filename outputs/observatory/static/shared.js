@@ -20,7 +20,7 @@ function cloneSliders(i){return [
 ]}
 export const GALAXY_SLIDERS=[
   {id:'n',group:'Compute',label:'Gravitating particles',kind:'choice',stops:[10000,30000,100000,200000,500000,1000000],default:100000,unit:'superparticles',hint:'1,000,000 is the ceiling. Each dot is a superparticle, not one star. 2–5 galaxies share this budget. One million is live CPU N-body; the 120 h cap still applies, and Observe uses more GPU memory.'},
-  {id:'threads',group:'Compute',label:'CPU threads',kind:'choice',stops:[1,4,8,10,14],default:8,unit:'threads'},
+  {id:'threads',group:'Compute',label:'CPU threads',kind:'choice',stops:[1,4,8,10,14],default:8,unit:'threads',hint:'Requested OpenMP team size. 14 uses all available CPU cores on this Mac; utilization varies during each step.'},
   {id:'duration',group:'Compute',label:'Simulation span',min:1,max:1200,step:1,default:10,unit:'model time units',physical:myr,hint:'Maximum updates live from the 120 h wall-time estimate as N, threads, dt and lifecycle change.'},
   {id:'seed',group:'Compute',label:'Random seed',kind:'number',min:0,max:4294967295,step:1,default:731,unit:'integer'},
   {id:'n_galaxies',group:'Encounter',label:'Live galaxies',kind:'choice',stops:[1,2,3,4,5],default:2,unit:'galaxies',hint:'1 = isolated revision-3 lab. 2–5 share the particle budget. Not a calibrated Local Group.'},
@@ -57,7 +57,7 @@ export function slidersFor(mode){return mode==='galaxy'?GALAXY_SLIDERS:PLANET_SL
 export function defaultsFor(mode){const out={};slidersFor(mode).forEach(s=>out[s.id]=s.default);return out}
 export function toConfig(mode,values){const cfg={mode};const scale=[1,1,1,1,1,1,1,1];slidersFor(mode).forEach(s=>{const v=values[s.id]??s.default;if(s.path){scale[s.path[1]]=Number(v)}else cfg[s.id]=s.kind==='bool'?Boolean(v):Number(v)});if(mode==='planets')cfg.planet_mass_scale=scale;return cfg}
 export function fromConfig(mode,cfg){const out=defaultsFor(mode);slidersFor(mode).forEach(s=>{if(s.path){const arr=cfg[s.path[0]];if(Array.isArray(arr)&&arr[s.path[1]]!=null)out[s.id]=arr[s.path[1]]}else if(cfg[s.id]!=null)out[s.id]=cfg[s.id]});if(mode==='galaxy'&&cfg.n_galaxies==null)out.n_galaxies=1;return out}
-export function estimateSeconds(cfg){if(cfg.mode==='planets'){const bodies=cfg.perturber_mass>0?10:9;return .25*cfg.duration/12*(bodies/9)**2}const n=cfg.n,steps=cfg.duration/cfg.dt;return REFERENCE_SECONDS*(n/1e5)*Math.log(n)/Math.log(1e5)*(steps/500)*(10/cfg.threads)*(cfg.lifecycle_enabled?1.15:1)*((cfg.n_galaxies||1)>1?1.05:1)}
+export function estimateSeconds(cfg){if(cfg.mode==='planets'){const bodies=cfg.perturber_mass>0?10:9;return .25*cfg.duration/12*(bodies/9)**2}const n=cfg.n,steps=cfg.duration/cfg.dt;const threads=cfg.threads;return REFERENCE_SECONDS*(n/1e5)*Math.log(n)/Math.log(1e5)*(steps/500)*(10/threads)*(cfg.lifecycle_enabled?1.15:1)*((cfg.n_galaxies||1)>1?1.05:1)}
 export function estimateWallHours(cfg){return estimateSeconds(cfg)/3600}
 export function maxDuration(cfg){const per=estimateSeconds({...cfg,duration:1});return per>0?WALL_CAP_HOURS*3600/per:Infinity}
 export function durationCap(cfg){if(cfg.mode==='planets')return 50;const m=maxDuration(cfg);return Math.max(1,Math.min(1200,Math.floor(m)))}

@@ -29,6 +29,7 @@ with tempfile.TemporaryDirectory(prefix='orbital-api-') as td:
         until(lambda:api('/api/system'));return p
     try:
         proc=start()
+        sysinfo=api('/api/system');result['performance_cores']=sysinfo.get('performance_cores');assert isinstance(result['performance_cores'],int) and 1<=result['performance_cores']<=int(sysinfo.get('cores') or result['performance_cores'])
         lab=urllib.request.urlopen(URL+'/lab').read().decode();assert '<canvas' not in lab and 'three' not in lab.lower() and 'Start computation' in lab and 'Stop computation' in lab and 'lab.js' in lab and 'id="start-compute"' in lab and 'id="stop-compute"' in lab and 'health-strip' in lab
         home=urllib.request.urlopen(URL+'/').read().decode();assert 'three.module.js' in home and 'value="1000000"' in home
         schema=api('/api/schema');result['n_choices']=schema['schema']['n']['allowed'];assert result['n_choices']==[10000,30000,100000,200000,500000,1000000]

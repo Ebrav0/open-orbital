@@ -6,7 +6,7 @@
 import json,os,sys,time,math,traceback,signal,shutil
 from pathlib import Path
 import numpy as np
-from physics import galaxy,planets,arrays,diagnostics,set_threads,rebound,GALAXY_DEFAULTS,apply_tree_box
+from physics import galaxy,planets,arrays,diagnostics,set_threads,rebound,GALAXY_DEFAULTS,apply_tree_box,performance_cores
 import stellar
 
 WALL_CAP_SECONDS=120*3600
@@ -40,8 +40,10 @@ def frame_bytes(s,meta,baryons,types_cache):
     return frame.tobytes()
 
 def run(folder):
-    folder=Path(folder);config=json.loads((folder/'config.json').read_text());set_threads(config.get('threads',1))
-    status=dict(phase='initializing',frames=0,progress=0,wall_seconds=0)
+    folder=Path(folder);config=json.loads((folder/'config.json').read_text())
+    used=set_threads(config.get('threads',1))
+    print(f'OpenMP {used} threads (requested {config.get("threads")}, {performance_cores()} performance cores)',flush=True)
+    status=dict(phase='initializing',frames=0,progress=0,wall_seconds=0,openmp_threads=used)
     stopping=[False]
     pid_path=folder/'worker.pid'
     pid_path.write_text(str(os.getpid()))
@@ -78,7 +80,7 @@ def run(folder):
             status.update(frames=1,phase='running',computed_time=0,diagnostics=initial,events=(status.get('events') or [])+['Initial conditions created.'],flags={})
         types_cache=static_types(meta) if baryons is None else None
         params=meta.get('params',{});lifecycle=bool(meta.get('lifecycle_enabled')) and baryons is not None
-        status.setdefault('flags',{});status.setdefault('events',[])
+        status.setdefault('flags',{});status.setdefault('events',[]);status['openmp_threads']=used
         def checkpoint():
             filename=f'checkpoint-{index:06d}.bin'
             s.save_to_file(str(folder/'checkpoint.tmp.bin'),delete_file=True)

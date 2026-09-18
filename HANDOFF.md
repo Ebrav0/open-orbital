@@ -1,5 +1,19 @@
 # Agent handoff — Open Orbital
 
+## CPU cap and service throttling correction — Codex, 2026-09-17
+
+Supersedes the P-core cap below: requested 14 now gives 14. Removed forced close binding, fixed captions/estimator, added validate_threads.py. Found LaunchAgent default ProcessType was throttling the workload; installer and installed plist now specify Interactive. Live checkpoint run 67be855d5342 resumed without resetting; 14 threads, ~1039% CPU in a ten-second measurement, frame 26 complete interval 13.017 s versus earlier 43.718 s. API/thread/browser checks passed. Full evidence, limitations and commands in outputs/observatory/CPU_DIAGNOSIS.md. Pre-existing dirty edits preserved; no commit combining another agent's work.
+
+
+## 1M run was on 14 threads including E-cores (2026-09-17)
+
+Live job `c9f32fae5585`: **1,000,000** particles, **14** OpenMP threads requested, **2 galaxies**, **lifecycle on**, duration 10, **paused at 66/168** frames (195 steps, 1430 s wall, last chunk **25 s**). Config still lists unused `companion_*` / bulge knobs; physics used clone defaults (`g2_sep=20`). This M4 Pro is **10 performance + 4 efficiency** cores (`hw.perflevel0.logicalcpu=10`). Barnes–Hut waits at a barrier, so the 4 E-threads leave P-cores idle — that matches Activity Monitor (E-cores packed, P-cores gappy). A 14-thread worker was still parked in RAM after Pause (peak footprint 889 MB, then swapped); SIGTERM left the job paused so Resume can spawn a new process. Saved `config.json` still says `threads=14` (not rewritten). Resume uses 10 P-cores. Did not auto-resume.
+
+Engine: `effective_threads()` caps OpenMP at P-cores, `OMP_PROC_BIND=close` / `OMP_PLACES=cores`, `OMP_DYNAMIC=false`, QoS `user-initiated` from inside the worker (`pthread_set_qos_class_self_np`). Did **not** wrap spawn in `taskpolicy` (that hung isolated API tests). Wait policy stays PASSIVE so a paused in-RAM worker would not spin.
+
+**Measured.** `effective_threads(14)→10`. `PYTHONPATH="$PWD/work/openmp" work/venv/bin/python outputs/observatory/tests/validate_api.py` (10.2 s, port 8767): `performance_cores=10`, `n_choices` 10k…1M, five-galaxy 10k OK, pause survives restart, isolated `n_galaxies=1` OK, planets energy 4.17e-16. LaunchAgent kickstart: Python PID 92037 on 8766, `GET /api/system` `performance_cores=10`, `worker_pid=null`, job still `paused` 66 frames. Browser `/lab`: CPU-threads hint names the P-core cap; 1M×14 draft estimate reads **10 P-cores (14 requested)** / 38.1 min (prediction). Historical JSON not rewritten.
+
+
 ## Rebase onto collision lab (2026-09-17)
 
 Kept origin/main 2–5 clone-galaxy physics (`build_one_galaxy` / `place_galaxy`, draft `orbital-lab-draft-v2`). Overlay: 1,000,000 particle stops, `MAX_RUNS=24`, Barnes–Hut `apply_tree_box`, LaunchAgent trampoline, lined-up Compute control room, Observe byte-capped frame cache. Resume after a daemon restart now `spawn()`s a paused job (adopt if the worker is still alive). Historical `validation.json` / r3 JSON were not rewritten. Library on 8766 is empty (`GET /api/jobs` `[]`); `PROTECTED` ids still refuse API DELETE if recreated.

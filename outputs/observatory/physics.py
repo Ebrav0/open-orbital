@@ -4,7 +4,7 @@
 # Isolated n_galaxies=1 still bit-matches revision 3; revision 4 is the generator stamp.
 """CPU models for the local observatory. No remote services are used."""
 import os
-os.environ.setdefault('OMP_NUM_THREADS','8')
+os.environ.setdefault('OMP_NUM_THREADS','1')
 os.environ.setdefault('OMP_WAIT_POLICY','PASSIVE')
 import ctypes,math
 import numpy as np
@@ -44,11 +44,44 @@ GALAXY_DEFAULTS=dict(n=100000,seed=731,theta=.4,dt=.02,softening=.06,
     **_encounter_defaults())
 PLANET_DEFAULTS=dict(jupiter_mass=1.,planet_mass_scale=[1.]*8,perturber_mass=0.,perturber_a=2.5)
 
+def performance_cores():
+    """Report performance-core count for display; this is not a worker limit."""
+    try:
+        r=__import__('subprocess').run(['sysctl','-n','hw.perflevel0.logicalcpu'],capture_output=True,text=True,timeout=1)
+        if r.returncode==0:
+            n=int(r.stdout.strip())
+            if n>0:return n
+    except Exception:
+        pass
+    return os.cpu_count() or 8
+
+def effective_threads(n):
+    n=max(1,int(n or 1))
+    # Honor the selected team size; core class is a scheduling choice for macOS.
+    return min(n,os.cpu_count() or n)
+
+def _set_qos_user_initiated():
+    """Request user-initiated scheduling priority; this does not pin cores."""
+    try:
+        lib=ctypes.CDLL('/usr/lib/system/libsystem_pthread.dylib')
+        lib.pthread_set_qos_class_self_np.argtypes=[ctypes.c_uint,ctypes.c_int]
+        lib.pthread_set_qos_class_self_np.restype=ctypes.c_int
+        lib.pthread_set_qos_class_self_np(0x19,0)  # QOS_CLASS_USER_INITIATED
+    except (OSError,AttributeError):
+        pass
+
 def set_threads(n):
+    n=effective_threads(n)
+    os.environ['OMP_NUM_THREADS']=str(n)
+    os.environ['OMP_DYNAMIC']='false'
+    # Avoid forcing affinity on heterogeneous Apple cores; let macOS place the team.
+    os.environ.setdefault('OMP_PROC_BIND','false')
+    _set_qos_user_initiated()
     try:
         omp=ctypes.CDLL('/opt/homebrew/opt/libomp/lib/libomp.dylib')
-        omp.omp_set_num_threads(int(n));omp.omp_set_dynamic(0)
+        omp.omp_set_dynamic(0);omp.omp_set_num_threads(n)
     except OSError:pass
+    return n
 
 TREE_ROOT_DEFAULT=1024.0
 

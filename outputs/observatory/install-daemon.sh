@@ -61,6 +61,8 @@ chmod 755 "$TRAMPOLINE"
   printf '%s\n' "    <string>${TRAMPOLINE}</string>"
   printf '%s\n' '  </array>'
   printf '%s\n' "  <key>WorkingDirectory</key><string>${SUPPORT}</string>"
+  # User-requested CPU simulations must not inherit launchd's default resource throttle.
+  printf '%s\n' '  <key>ProcessType</key><string>Interactive</string>'
   printf '%s\n' '  <key>RunAtLoad</key><true/>'
   printf '%s\n' '  <key>KeepAlive</key><true/>'
   printf '%s\n' "  <key>StandardOutPath</key><string>${DATA_DIR}/server.log</string>"
