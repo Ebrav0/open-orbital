@@ -45,7 +45,7 @@
   },
   "lifecycle_speed40_2048": {
     "steps": 500,
-    "wall_seconds": 9.077550514999984,
+    "wall_seconds": 9.181624889999966,
     "mass_drift": 0.0,
     "baryon_mass_drift": 2.2204460492503126e-16,
     "counts": {
@@ -139,5 +139,6 @@
     "sep": 18.55411923305627,
     "hot": 0.007062064525559699
   },
-  "ism_resume_max_state_difference": 0.0
+  "ism_resume_max_state_difference": 0.0,
+  "peek_preserves_sfr_window": true
 }
