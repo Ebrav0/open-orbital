@@ -1,0 +1,329 @@
+{
+  "model_revision": 6,
+  "solar_50_year_energy_change": 0.0,
+  "perturbed_12_year_energy_change": 3.3306690738754696e-16,
+  "earth_period_position_error": 1.7694253173299623e-15,
+  "isolated_vs_n_galaxies_1_max_state_difference": 0.0,
+  "rev2_reproduction_max_state_difference": null,
+  "rev3_isolated_max_state_difference": 0.0,
+  "galaxy_2048_t10_lifecycle_off": [
+    {
+      "dt": 0.02,
+      "theta": 0.4,
+      "energy_change": 4.395333502682508e-05,
+      "disk_radius_change": 0.10758445489146329,
+      "halo_radius_change": 0.01802443015649935,
+      "angular_change": 0.002564420322111763,
+      "finite": true
+    },
+    {
+      "dt": 0.01,
+      "theta": 0.4,
+      "energy_change": 5.694913594700424e-06,
+      "disk_radius_change": 0.10668957111880539,
+      "halo_radius_change": 0.0178138924735165,
+      "angular_change": 0.0025249960008387564,
+      "finite": true
+    },
+    {
+      "dt": 0.02,
+      "theta": 0.25,
+      "energy_change": 4.624853529533457e-05,
+      "disk_radius_change": 0.11847283120115781,
+      "halo_radius_change": 0.017401982907075952,
+      "angular_change": 0.0005855259597607726,
+      "finite": true
+    }
+  ],
+  "disk_speed_ratio_mass3_vs_1": 1.1941352871083852,
+  "checkpoint_max_state_difference": 0.0,
+  "kroupa_sample": {
+    "min": 0.08000040790212054,
+    "max": 92.32245406552235,
+    "median": 0.2370833954698734,
+    "fraction_above_8": 0.006165
+  },
+  "lifecycle_speed40_2048": {
+    "steps": 500,
+    "wall_seconds": 9.062538831999973,
+    "mass_drift": 0.0,
+    "baryon_mass_drift": 2.2204460492503126e-16,
+    "counts": {
+      "gas": 0,
+      "protostar": 0,
+      "main_sequence": 550,
+      "giant": 4,
+      "white_dwarf": 55,
+      "neutron_star": 3,
+      "black_hole": 2,
+      "halo": 1434,
+      "smbh": 0,
+      "hot_gas": 0
+    },
+    "births": 307,
+    "deaths": 60,
+    "supernovae": 5,
+    "mass_return_failed": 0.05577371193181206,
+    "finite": true
+  },
+  "resume_rng_max_mass_difference": 0.0,
+  "split_particle_counts_5x10000": [
+    2000,
+    2000,
+    2000,
+    2000,
+    2000
+  ],
+  "two_galaxy_head_on": {
+    "n": 2048,
+    "sep0": 19.786735211244313,
+    "sep80": 16.44460784472139,
+    "finite": true,
+    "slices": [
+      1024,
+      1024
+    ]
+  },
+  "five_galaxy_4096": {
+    "slices": [
+      820,
+      819,
+      819,
+      819,
+      819
+    ],
+    "finite": true
+  },
+  "two_galaxy_lifecycle_200": {
+    "mass_drift": 1.6917684184764287e-16,
+    "disk_mask_sum": 614,
+    "finite": true
+  },
+  "retrograde_Lz": {
+    "A": 2.060504354602826,
+    "B": -4.5712906667722715
+  },
+  "cooling_peak_K": 246834.0467068651,
+  "temperature_roundtrip_1e4": 9741.898599826209,
+  "cooling_delay_holds_hot": 500000.00000160903,
+  "cooling_undelayed_drops": 2257.416051168748,
+  "ram_momentum_drift": 0.0,
+  "ram_vrel0": 2.4,
+  "ram_vrel1": 1.0175999999999998,
+  "ram_u_ratio": 77.70553570876838,
+  "sf_rejects_hot": true,
+  "ism_lifecycle_80": {
+    "mass_drift": 0.0,
+    "finite": true,
+    "mean_T": 5196.61780529966,
+    "hot_mass": 0.0,
+    "cold_mass": 0.021986970684039094,
+    "births": 293,
+    "Z": 1.037037037037037,
+    "counts": {
+      "gas": 14,
+      "protostar": 0,
+      "main_sequence": 576,
+      "giant": 1,
+      "white_dwarf": 23,
+      "neutron_star": 0,
+      "black_hole": 0,
+      "halo": 1434,
+      "smbh": 0,
+      "hot_gas": 0
+    }
+  },
+  "two_galaxy_ism_40": {
+    "mass_drift": 0.0,
+    "finite": true,
+    "sep": 18.55418040148046,
+    "hot": 0.0
+  },
+  "ism_resume_max_state_difference": 0.0,
+  "peek_preserves_sfr_window": true,
+  "snowplow_levels": [
+    {
+      "sn_momentum": 0.0,
+      "radial_kms": 0.0,
+      "momentum": 0.0,
+      "deaths": 1,
+      "supernovae": 1,
+      "deposited": 0.0
+    },
+    {
+      "sn_momentum": 0.5,
+      "radial_kms": 9.909909909909912,
+      "momentum": 4.81482486096809e-35,
+      "deaths": 1,
+      "supernovae": 1,
+      "deposited": 0.00735171261487051
+    },
+    {
+      "sn_momentum": 1.5,
+      "radial_kms": 29.729729729729733,
+      "momentum": 9.62964972193618e-35,
+      "deaths": 1,
+      "supernovae": 1,
+      "deposited": 0.02205513784461153
+    }
+  ],
+  "snowplow_cap_max_speed": 1.1999999999999997,
+  "cloud_dissipation_levels": [
+    {
+      "cloud_dissipation": 0.0,
+      "rms": 0.07610490087134282,
+      "u": 0.008837833401162502,
+      "momentum_drift": 0.0,
+      "cloud_heat": 0.0
+    },
+    {
+      "cloud_dissipation": 1.0,
+      "rms": 0.05406588648171755,
+      "u": 0.010272705763729004,
+      "momentum_drift": 1.0842021724855044e-19,
+      "cloud_heat": 3.443693670159662e-05
+    },
+    {
+      "cloud_dissipation": 3.0,
+      "rms": 0.034128185340103034,
+      "u": 0.011153604419913213,
+      "momentum_drift": 3.2526065174565133e-19,
+      "cloud_heat": 5.557850445001762e-05
+    }
+  ],
+  "metal_diffusion_levels": [
+    {
+      "metal_diffusion": 0.0,
+      "metal_drift": 0.0,
+      "contrast": 0.039
+    },
+    {
+      "metal_diffusion": 0.5,
+      "metal_drift": 1.0842021724855044e-19,
+      "contrast": 0.031946468545149306
+    },
+    {
+      "metal_diffusion": 2.0,
+      "metal_drift": 1.0842021724855044e-19,
+      "contrast": 0.01766457307818238
+    }
+  ],
+  "fuv_heat": {
+    "no_star": 1.9950124688279304e-22,
+    "no_star_knob": 1.9950124688279304e-22,
+    "with_star": 3.6575228595178726e-22,
+    "dense_shielded": 4.0695523492415842e-25,
+    "shield_dense": 0.0011098779134295228
+  },
+  "fuv_temperature_levels": [
+    {
+      "nH": 0.05,
+      "no_star": 29968416.34224451,
+      "star_fuv0": 29968416.34224451,
+      "star_fuv1": 29998168.588694762,
+      "star_fuv4": 29999999.624780323
+    },
+    {
+      "nH": 0.5,
+      "no_star": 19952.62314968879,
+      "star_fuv0": 19952.62314968879,
+      "star_fuv1": 39810.71705534969,
+      "star_fuv4": 100000.0
+    },
+    {
+      "nH": 5.0,
+      "no_star": 5011.872336272725,
+      "star_fuv0": 5011.872336272725,
+      "star_fuv1": 5011.872336272725,
+      "star_fuv4": 10000.0
+    },
+    {
+      "nH": 20.0,
+      "no_star": 1000.0000000000002,
+      "star_fuv0": 1000.0000000000002,
+      "star_fuv1": 1000.0,
+      "star_fuv4": 1000.0
+    }
+  ],
+  "ionization_levels": [
+    {
+      "nH": 1e-06,
+      "x": 0.3837466302716162,
+      "x_eq": 0.9999830101754652,
+      "frac": 0.37117646581085895,
+      "lag": 0.616236379903849
+    },
+    {
+      "nH": 0.0001,
+      "x": 0.3836048517924796,
+      "x_eq": 0.9983067120246888,
+      "frac": 0.3716675428301708,
+      "lag": 0.6147018602322092
+    },
+    {
+      "nH": 0.01,
+      "x": 0.376514366353869,
+      "x_eq": 0.8710980906104697,
+      "frac": 0.4188875175341432,
+      "lag": 0.49458372425660074
+    },
+    {
+      "nH": 1.0,
+      "x": 0.21533013340191715,
+      "x_eq": 0.21537607462912692,
+      "frac": 0.9997648574560781,
+      "lag": 4.594122720977256e-05
+    }
+  ],
+  "ionization_equilibrium": {
+    "million_K": 0.99999912106122,
+    "thousand_K_dense": 1.859082511674931e-66
+  },
+  "galaxy_ism_levels_1024_30": [
+    {
+      "level": "low",
+      "mass_drift": 0.0,
+      "finite": true,
+      "mean_T": 4012.765292400848,
+      "mean_x": 0.04205920113011665,
+      "x_lag": 0.0,
+      "metal_std": 0.12508541588889555,
+      "cloud_heat": 0.0,
+      "sn_momentum": 0.0,
+      "hot_mass": 0.0,
+      "births": 106,
+      "supernovae": 2,
+      "gas_face_pairs": 0
+    },
+    {
+      "level": "mid",
+      "mass_drift": 0.0,
+      "finite": true,
+      "mean_T": 4012.765292400848,
+      "mean_x": 0.04205920112988428,
+      "x_lag": 0.0,
+      "metal_std": 0.12508541588889555,
+      "cloud_heat": 7.354042409884712e-05,
+      "sn_momentum": 0.000331289770492062,
+      "hot_mass": 0.0,
+      "births": 106,
+      "supernovae": 2,
+      "gas_face_pairs": 0
+    },
+    {
+      "level": "high",
+      "mass_drift": 0.0,
+      "finite": true,
+      "mean_T": 4012.765292400848,
+      "mean_x": 0.042059201129728704,
+      "x_lag": 0.0,
+      "metal_std": 0.12508541588889555,
+      "cloud_heat": 0.00020810878689489596,
+      "sn_momentum": 0.00033128977049206204,
+      "hot_mass": 0.0,
+      "births": 106,
+      "supernovae": 2,
+      "gas_face_pairs": 0
+    }
+  ]
+}

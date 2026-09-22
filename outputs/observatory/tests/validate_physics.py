@@ -284,7 +284,7 @@ assert metal_rows[0]['contrast']>metal_rows[1]['contrast']>metal_rows[2]['contra
 h_off,*_=ism.radiation_field(.05,1.,0.,dict(fuv_heating=0.))
 h_knob,*_=ism.radiation_field(.05,1.,0.,dict(fuv_heating=5.))
 h_star,_,_,_=ism.radiation_field(.05,1.,200.,dict(fuv_heating=1.))
-h_dense,_,_,sh_d=ism.radiation_field(30.,1.,200.,dict(fuv_heating=1.))
+h_dense,_,sh_d,_mult=ism.radiation_field(30.,1.,200.,dict(fuv_heating=1.))
 results['fuv_heat']=dict(no_star=float(h_off),no_star_knob=float(h_knob),with_star=float(h_star),dense_shielded=float(np.reshape(h_dense,-1)[0]),shield_dense=float(np.reshape(sh_d,-1)[0]))
 assert abs(float(h_off)-float(h_knob))<1e-30 and float(h_star)>float(h_off)*1.2 and float(np.reshape(h_dense,-1)[0])<float(h_star)*0.05
 
