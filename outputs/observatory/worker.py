@@ -1,7 +1,8 @@
 # AGENT MAP: this process alone owns a simulation and its frame stream.
 # Publish frame bytes before status; checkpoint JSON is the commit pointer (rebound binary + baryon npz).
 # Pause stops computation, not viewer playback. Resume may replay uncommitted frames.
-# Lifecycle runs after every leapfrog step when enabled. Wall-time cap is 120 h per resume window.
+# Lifecycle/ISM run after every leapfrog step when enabled. ISM T/phase is peeked every frame.
+# Wall-time cap is 120 h per resume window. Energy sampling stays on the 40-frame cadence.
 # SIGTERM checkpoints: control.json pause stays paused; otherwise interrupted. worker.pid is for adopt-on-restart.
 import json,os,sys,time,math,traceback,signal,shutil
 from pathlib import Path
@@ -63,6 +64,7 @@ def run(folder):
                 atomic(folder/'status.json',status)
             here=Path(__file__).parent
             shutil.copy2(here/'physics.py',folder/'model_source.py');shutil.copy2(here/'stellar.py',folder/'stellar_source.py')
+            if (here/'ism.py').exists():shutil.copy2(here/'ism.py',folder/'ism_source.py')
             if config['mode']=='galaxy':s,meta,baryons=galaxy(**{k:v for k,v in config.items() if k in GALAXY_DEFAULTS})
             else:s,meta,baryons=planets(config.get('jupiter_mass',1),config.get('planet_mass_scale'),config.get('perturber_mass',0),config.get('perturber_a',2.5))
             gix=meta.pop('_galaxy_index',None)
@@ -92,13 +94,26 @@ def run(folder):
                 for old in older[:-2]:old.unlink()
         def note(text):
             status['events'].append(text);status['events']=status['events'][-40:]
+        def note_lifecycle(lc):
+            if not lc:return
+            if lc.get('supernovae_cumulative',0)>0 and not status['flags'].get('first_sn'):status['flags']['first_sn']=True;note(f'First supernova at {s.t*meta["time_scale"]:.0f} Myr.')
+            if lc.get('gas_mass',1)<=0 and not status['flags'].get('gas_gone'):status['flags']['gas_gone']=True;note(f'Gas reservoir exhausted at {s.t*meta["time_scale"]:.0f} Myr; star formation stops.')
+            if lc.get('hot_gas_mass',0)>0 and not status['flags'].get('hot_gas'):status['flags']['hot_gas']=True;note(f'Hot ionized gas appeared at {s.t*meta["time_scale"]:.0f} Myr (T ≳ 1.2×10⁵ K). Blastwave delay holds supernova heat.')
+        def peek_lifecycle():
+            if baryons is None:return
+            mass=np.empty(s.N);s.serialize_particle_data(m=mass)
+            d=status.get('diagnostics')
+            if not isinstance(d,dict):d={};status['diagnostics']=d
+            d['lifecycle']=stellar.peek(s,baryons,mass)
         def append_history():
             d=status.get('diagnostics') or {};lc=d.get('lifecycle') or {}
             rec=dict(frame=status.get('frames'),t=status.get('computed_time'),wall_seconds=status.get('wall_seconds'),
                      disk_half_radius=d.get('disk_half_radius'),halo_half_radius=d.get('halo_half_radius'),
                      angular_change=d.get('angular_change'),energy_change=d.get('energy_change'),
                      sfr=lc.get('sfr'),births=lc.get('births_cumulative'),deaths=lc.get('deaths_cumulative'),
-                     supernovae=lc.get('supernovae_cumulative'),counts=lc.get('counts'))
+                     supernovae=lc.get('supernovae_cumulative'),counts=lc.get('counts'),
+                     mean_temperature=lc.get('mean_temperature'),cold_gas_mass=lc.get('cold_gas_mass'),hot_gas_mass=lc.get('hot_gas_mass'),
+                     mean_metallicity=lc.get('mean_metallicity'),mean_electron_fraction=lc.get('mean_electron_fraction'),metal_std=lc.get('metal_std'))
             with (folder/'diagnostics.jsonl').open('a') as hf:hf.write(json.dumps(rec)+'\n')
         def requested_action():
             try:return json.loads((folder/'control.json').read_text()).get('action')
@@ -175,10 +190,9 @@ def run(folder):
                             if sep12<2*(rd_a+rd_b):
                                 status['flags']['overlap_12']=True;note('Galaxies 1 and 2 overlapping (separation < 2 × (Rd_A + Rd_B)).')
                     status['diagnostics']=d
-                    lc=d.get('lifecycle')
-                    if lc:
-                        if lc['supernovae_cumulative']>0 and not status['flags'].get('first_sn'):status['flags']['first_sn']=True;note(f'First supernova at {s.t*meta["time_scale"]:.0f} Myr.')
-                        if lc['gas_mass']<=0 and not status['flags'].get('gas_gone'):status['flags']['gas_gone']=True;note(f'Gas reservoir exhausted at {s.t*meta["time_scale"]:.0f} Myr; star formation stops.')
+                elif lifecycle:
+                    peek_lifecycle()
+                note_lifecycle((status.get('diagnostics') or {}).get('lifecycle'))
                 if config['mode']=='galaxy' or index%20==0 or index==len(meta['times'])-1:atomic(folder/'status.json',status)
                 append_history()
                 if time.monotonic()-last_checkpoint>15:checkpoint();last_checkpoint=time.monotonic()

@@ -21,6 +21,8 @@ SCHEMA=dict(
     n_galaxies=('choice',[1,2,3,4,5]),
     disk_mass=('float',(.2,5)),halo_mass=('float',(2,80)),disk_fraction=('float',(.15,.45)),disk_scale=('float',(.5,3)),disk_thickness=('float',(.03,.25)),halo_scale=('float',(1.5,10)),warmth=('float',(.4,3)),smbh_mass=('float',(0,.1)),
     lifecycle_enabled=('bool',None),gas_fraction=('float',(0,.8)),t_sf=('float',(.1,20)),lifecycle_speed=('float',(1,80)),sf_density_bias=('float',(0,1)),imf_mmin=('float',(.05,1)),imf_mmax=('float',(20,150)),grow_rate=('float',(0,1)),sn_kick_kms=('float',(0,200)),
+    ism_enabled=('bool',None),metallicity=('float',(0,3)),cooling_speed=('float',(0,4)),sn_feedback=('float',(0,1)),ram_pressure=('float',(0,3)),n_sf=('float',(.01,5)),
+    sn_momentum=('float',(0,2)),cloud_dissipation=('float',(0,4)),metal_diffusion=('float',(0,3)),fuv_heating=('float',(0,4)),noneq_ionization=('bool',None),
     theta=('float',(.25,.7)),softening=('float',(.03,.15)),dt=('float',(.01,.04)),
     jupiter_mass=('choice',[1,3,10]),planet_mass_scale=('list8',(.25,10)),perturber_mass=('float',(0,.01)),perturber_a=('float',(.5,40)))
 for _i in range(2,6):
@@ -29,9 +31,9 @@ for _i in range(2,6):
     SCHEMA[f'g{_i}_azimuth']=('float',(0,360));SCHEMA[f'g{_i}_inclination']=('float',(0,180));SCHEMA[f'g{_i}_disk_tilt']=('float',(0,180))
     SCHEMA[f'g{_i}_spin']=('choice',[1,-1])
 _CLONE_KEYS=[k for i in range(2,6) for k in (f'g{i}_mass_ratio',f'g{i}_size_ratio',f'g{i}_sep',f'g{i}_impact',f'g{i}_vrel',f'g{i}_azimuth',f'g{i}_inclination',f'g{i}_disk_tilt',f'g{i}_spin')]
-GALAXY_KEYS=['n','threads','seed','n_galaxies']+_CLONE_KEYS+['disk_mass','halo_mass','disk_fraction','disk_scale','disk_thickness','halo_scale','warmth','smbh_mass','lifecycle_enabled','gas_fraction','t_sf','lifecycle_speed','sf_density_bias','imf_mmin','imf_mmax','grow_rate','sn_kick_kms','theta','softening','dt']
+GALAXY_KEYS=['n','threads','seed','n_galaxies']+_CLONE_KEYS+['disk_mass','halo_mass','disk_fraction','disk_scale','disk_thickness','halo_scale','warmth','smbh_mass','lifecycle_enabled','gas_fraction','t_sf','lifecycle_speed','sf_density_bias','imf_mmin','imf_mmax','grow_rate','sn_kick_kms','ism_enabled','metallicity','cooling_speed','sn_feedback','ram_pressure','n_sf','sn_momentum','cloud_dissipation','metal_diffusion','fuv_heating','noneq_ionization','theta','softening','dt']
 PLANET_KEYS=['seed','jupiter_mass','planet_mass_scale','perturber_mass','perturber_a']
-DEFAULTS=dict(n=100000,threads=8,seed=731,n_galaxies=2,disk_mass=1,halo_mass=20,disk_fraction=.3,disk_scale=1.2,disk_thickness=.08,halo_scale=4,warmth=1,smbh_mass=0,lifecycle_enabled=True,gas_fraction=.2,t_sf=2,lifecycle_speed=1,sf_density_bias=.7,imf_mmin=.08,imf_mmax=100,grow_rate=.2,sn_kick_kms=0,theta=.4,softening=.06,dt=.02,jupiter_mass=1,planet_mass_scale=[1]*8,perturber_mass=0,perturber_a=2.5)
+DEFAULTS=dict(n=100000,threads=8,seed=731,n_galaxies=2,disk_mass=1,halo_mass=20,disk_fraction=.3,disk_scale=1.2,disk_thickness=.08,halo_scale=4,warmth=1,smbh_mass=0,lifecycle_enabled=True,gas_fraction=.2,t_sf=2,lifecycle_speed=1,sf_density_bias=.7,imf_mmin=.08,imf_mmax=100,grow_rate=.2,sn_kick_kms=0,ism_enabled=True,metallicity=1,cooling_speed=1,sn_feedback=.15,ram_pressure=1,n_sf=.1,sn_momentum=.4,cloud_dissipation=1,metal_diffusion=.6,fuv_heating=1,noneq_ionization=True,theta=.4,softening=.06,dt=.02,jupiter_mass=1,planet_mass_scale=[1]*8,perturber_mass=0,perturber_a=2.5)
 for _i in range(2,6):
     DEFAULTS[f'g{_i}_mass_ratio']=1;DEFAULTS[f'g{_i}_size_ratio']=1;DEFAULTS[f'g{_i}_sep']=20;DEFAULTS[f'g{_i}_impact']=4;DEFAULTS[f'g{_i}_vrel']=2
     DEFAULTS[f'g{_i}_azimuth']=CLONE_AZIMUTH[_i];DEFAULTS[f'g{_i}_inclination']=0;DEFAULTS[f'g{_i}_disk_tilt']=0;DEFAULTS[f'g{_i}_spin']=1
@@ -189,7 +191,9 @@ def estimate_seconds(cfg):
         return .25*cfg['duration']/12*(bodies/9)**2
     n=cfg['n'];steps=cfg['duration']/cfg['dt']
     extra=1.05 if int(cfg.get('n_galaxies') or 1)>1 else 1
-    return REFERENCE_SECONDS*(n/1e5)*math.log(n)/math.log(1e5)*(steps/500)*(10/cfg['threads'])*(1.15 if cfg.get('lifecycle_enabled') else 1)*extra
+    lc=1.15 if cfg.get('lifecycle_enabled') else 1
+    ism=1.18 if cfg.get('lifecycle_enabled') and cfg.get('ism_enabled',True) else 1
+    return REFERENCE_SECONDS*(n/1e5)*math.log(n)/math.log(1e5)*(steps/500)*(10/cfg['threads'])*lc*ism*extra
 
 def max_duration(cfg):
     trial=dict(cfg,duration=1.);per_unit=estimate_seconds(trial)

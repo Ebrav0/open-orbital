@@ -11,7 +11,7 @@ import worker
 
 set_threads(8)
 results=dict(model_revision=MODEL_REVISION,n=1000000)
-assert MODEL_REVISION==4
+assert MODEL_REVISION==6
 
 # Isolated ICs must keep the revision-4 tree box so small-N energy tests stay comparable.
 s2048,_,_=galaxy(2048,lifecycle_enabled=False)
