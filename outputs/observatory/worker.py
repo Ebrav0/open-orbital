@@ -113,7 +113,7 @@ def run(folder):
                      sfr=lc.get('sfr'),births=lc.get('births_cumulative'),deaths=lc.get('deaths_cumulative'),
                      supernovae=lc.get('supernovae_cumulative'),counts=lc.get('counts'),
                      mean_temperature=lc.get('mean_temperature'),cold_gas_mass=lc.get('cold_gas_mass'),hot_gas_mass=lc.get('hot_gas_mass'),
-                     mean_metallicity=lc.get('mean_metallicity'))
+                     mean_metallicity=lc.get('mean_metallicity'),mean_electron_fraction=lc.get('mean_electron_fraction'),metal_std=lc.get('metal_std'))
             with (folder/'diagnostics.jsonl').open('a') as hf:hf.write(json.dumps(rec)+'\n')
         def requested_action():
             try:return json.loads((folder/'control.json').read_text()).get('action')

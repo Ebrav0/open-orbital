@@ -84,9 +84,9 @@ def save_baryons(path,b):
     if mask is None:
         mask=np.zeros(len(b['type']),np.uint8);mask[:int(b['disk_count'])]=1
     scalars=np.array([b['disk_count'],b['debt'],b['born_mass'],b['born_window_myr'],b['supernovae'],b['deaths'],b['births'],b['failed_return'],
-                      b.get('metals_produced',0.),b.get('sn_heat',0.),b.get('shock_heat',0.)],dtype=np.float64)
+                      b.get('metals_produced',0.),b.get('sn_heat',0.),b.get('shock_heat',0.),b.get('sn_momentum',0.),b.get('cloud_heat',0.)],dtype=np.float64)
     kw=dict(type=b['type'],age=b['age'],m_star=b['m_star'],birth_time=b['birth_time'],disk_mask=np.asarray(mask,dtype=np.uint8),scalars=scalars)
-    for k in ('u','Z','cool_delay','z_birth'):
+    for k in ('u','Z','cool_delay','z_birth','x'):
         if k in b:kw[k]=np.asarray(b[k])
     np.savez(path,**kw)
 
@@ -96,8 +96,9 @@ def load_baryons(path):
     else:
         mask=np.zeros(n,np.uint8);mask[:disk_count]=1
     b=dict(type=z['type'].astype(np.uint8),age=z['age'],m_star=z['m_star'],birth_time=z['birth_time'],disk_mask=mask,disk_count=disk_count,debt=float(s[1]),born_mass=float(s[2]),born_window_myr=float(s[3]),supernovae=int(s[4]),deaths=int(s[5]),births=int(s[6]),failed_return=float(s[7]),
-           metals_produced=float(s[8]) if len(s)>8 else 0.,sn_heat=float(s[9]) if len(s)>9 else 0.,shock_heat=float(s[10]) if len(s)>10 else 0.)
-    for k in ('u','Z','cool_delay','z_birth'):
+           metals_produced=float(s[8]) if len(s)>8 else 0.,sn_heat=float(s[9]) if len(s)>9 else 0.,shock_heat=float(s[10]) if len(s)>10 else 0.,
+           sn_momentum=float(s[11]) if len(s)>11 else 0.,cloud_heat=float(s[12]) if len(s)>12 else 0.)
+    for k in ('u','Z','cool_delay','z_birth','x'):
         if k in z.files:b[k]=z[k].astype(np.float64)
     ism.attach(b,{})
     return b
@@ -169,7 +170,8 @@ def step(sim,b,params,dt_model,seed):
                     src=gas_all[nb];dm[src]+=e/len(src);dm[di]-=e
                     y=ism.YIELD_SN if m_star[di]>=8 else ism.YIELD_AGB
                     metal_add[src]+=y*e/len(src);b['metals_produced']=float(b.get('metals_produced',0)+y*e)
-                    if ism_on and m_star[di]>=8:ism.deposit_heat(b,m+dm,src,e,params)
+                    if ism_on and m_star[di]>=8:
+                        if ism.deposit_feedback(b,m+dm,q[:,3:],pos,src,pos[di],int(di),e,params):dv=True
                 else:b['failed_return']+=float(e)
             if rtype[j] in (NS,BH) and kick_kms>0:kicks.append(di)
         types[dying]=rtype;b['deaths']+=len(dying);b['supernovae']+=int(np.sum(m_star[dying]>=8));changed=True
@@ -190,7 +192,7 @@ def step(sim,b,params,dt_model,seed):
     t_sf_myr=max(float(params['t_sf'])*1000.,1.)
     m_eff=m+dm
     if ism_on:
-        eligible=np.flatnonzero(ism.star_forming(pos,q[:,3:],m_eff,b['u'],types,params))
+        eligible=np.flatnonzero(ism.star_forming(pos,q[:,3:],m_eff,b['u'],types,params,b.get('x')))
     else:
         eligible=np.flatnonzero(types==GAS)
     pool_mass=float(np.sum(m_eff[eligible])) if len(eligible) else 0.

@@ -1,7 +1,7 @@
 # AGENT MAP: model generators return (REBOUND Simulation, metadata, baryons-or-None).
 # Keep units, model_revision and diagnostics aligned. Never silently alter saved runs.
 # Every structural constant is a parameter with a default that reproduces model revision 2.
-# Isolated n_galaxies=1 still bit-matches revision 3; revision 5 is the generator stamp (ISM is baryon-only).
+# Isolated n_galaxies=1 still bit-matches revision 3; revision 6 is the generator stamp (ISM is baryon-only).
 """CPU models for the local observatory. No remote services are used."""
 import os
 os.environ.setdefault('OMP_NUM_THREADS','8')
@@ -14,7 +14,7 @@ from scipy.integrate import cumulative_trapezoid
 import stellar
 from stellar import MYR_PER_TIME,V_KMS
 
-MODEL_REVISION=5
+MODEL_REVISION=6
 MIN_PARTICLES_PER_GALAXY=256
 CLONE_AZIMUTH={2:0.,3:120.,4:240.,5:180.}
 
@@ -42,6 +42,7 @@ GALAXY_DEFAULTS=dict(n=100000,seed=731,theta=.4,dt=.02,softening=.06,
     disk_mass=1.,halo_mass=20.,disk_fraction=.3,disk_scale=1.2,disk_thickness=.08,halo_scale=4.,warmth=1.,smbh_mass=0.,
     lifecycle_enabled=True,gas_fraction=.2,t_sf=2.,lifecycle_speed=1.,sf_density_bias=.7,imf_mmin=.08,imf_mmax=100.,grow_rate=.2,sn_kick_kms=0.,
     ism_enabled=True,metallicity=1.,cooling_speed=1.,sn_feedback=.15,ram_pressure=1.,n_sf=.1,
+    sn_momentum=.4,cloud_dissipation=1.,metal_diffusion=.6,fuv_heating=1.,noneq_ionization=True,
     **_encounter_defaults())
 PLANET_DEFAULTS=dict(jupiter_mass=1.,planet_mass_scale=[1.]*8,perturber_mass=0.,perturber_a=2.5)
 
@@ -87,7 +88,7 @@ def galaxy_params(overrides=None):
     P=dict(GALAXY_DEFAULTS)
     for k,v in (overrides or {}).items():
         if k in P and v is not None:P[k]=v
-    P['lifecycle_enabled']=bool(P['lifecycle_enabled']);P['ism_enabled']=bool(P.get('ism_enabled',True));P['n']=int(P['n']);P['seed']=int(P['seed'])
+    P['lifecycle_enabled']=bool(P['lifecycle_enabled']);P['ism_enabled']=bool(P.get('ism_enabled',True));P['noneq_ionization']=bool(P.get('noneq_ionization',True));P['n']=int(P['n']);P['seed']=int(P['seed'])
     P['n_galaxies']=int(P.get('n_galaxies') or 1)
     if not 1<=P['n_galaxies']<=5:raise ValueError('n_galaxies must be between 1 and 5')
     for i in range(2,6):P[f'g{i}_spin']=int(P[f'g{i}_spin'])
@@ -263,12 +264,12 @@ def galaxy(n=100000,seed=731,theta=.4,dt=.02,**overrides):
         title=f'{G}-galaxy encounter'+(' + central black holes' if nbh else '')
         encounter_text=' Galaxies share one live N-body tree; there is no prescribed merger path. Superparticles, not resolved galaxies. Barnes–Hut with several dense concentrations at the same θ is coarser than an isolated galaxy. Birth-galaxy colors stay frozen at t=0. The default 245 Myr span is a first passage, not a remnant, and not MW–M31.'
     if P['lifecycle_enabled'] and P.get('ism_enabled',True):
-        lifecycle_text=(' Collisionless bookkeeping still sets who is a star; gas parcels also feel a grid pressure force, ram drag, CIE-like cooling Λ(T,Z), and blastwave-delayed supernova heat. Star formation is allowed only in cold, dense, non-expanding gas. This is not SPH: no Riemann solver, no resolved Jeans mass, no chemistry. Superparticle SN coupling is a laboratory parameter. lifecycle_speed is a stellar clock, not a hydro calibration.')
+        lifecycle_text=(' Collisionless bookkeeping still sets who is a star. Gas also feels grid pressure, ram drag, a momentum-conserving snowplow, intra-cell cloud drag, and CIE-like cooling Λ(T,Z) with a carried electron fraction. Metals mix across cell faces. Young massive stars add local FUV that dense gas can shield. Star formation is allowed only in cold, dense, non-expanding gas. This is not SPH and not a chemical network. Superparticle SN coupling is a laboratory parameter. lifecycle_speed is a stellar clock, not a hydro calibration.')
     elif P['lifecycle_enabled']:
         lifecycle_text=(' Collisionless gas parcels form stars on a density-biased timescale; stars age on a mass-lifetime clock and die into white dwarfs, neutron stars or black holes, returning mass to nearby gas. lifecycle_speed is a laboratory clock, not a calibration. ISM hydro is off: no cooling, ram pressure or blastwave heat.')
     else:
         lifecycle_text=' Stellar lifecycle disabled: equal-mass collisionless disk.'
-    isolated_text=' n_galaxies=1 is the isolated revision-3 lab (same distribution function; generator stamped revision 5).' if G==1 else ''
+    isolated_text=' n_galaxies=1 is the isolated revision-3 lab (same distribution function; generator stamped revision 6).' if G==1 else ''
     camera=1.3*max(np.linalg.norm(g['com0']) for g in galaxies) if G>1 else None
     meta=dict(mode='galaxy',model_revision=MODEL_REVISION,n=n,disk_count=nd,halo_count=nh,smbh_count=nbh,n_galaxies=G,galaxies=galaxies,title=title,
       length_unit='kpc',length_scale=3,time_unit='Myr',time_scale=MYR_PER_TIME,mass_unit_solar=1e10,velocity_unit_kms=V_KMS,theta=theta,softening=eps,dt=dt,
