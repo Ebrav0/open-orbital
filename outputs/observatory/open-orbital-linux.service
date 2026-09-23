@@ -1,0 +1,15 @@
+[Unit]
+Description=Open Orbital CPU observatory
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=/home/edb/open-orbital
+Environment=OPENORBITAL_DAEMON=1
+ExecStart=/bin/sh /home/edb/open-orbital/outputs/observatory/run.sh
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=120
+
+[Install]
+WantedBy=default.target

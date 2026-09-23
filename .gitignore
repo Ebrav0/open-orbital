@@ -19,3 +19,6 @@ work/*.log
 
 # Isolated queue browser-test experiments
 work/queue-ui-data/
+
+# Node-local validation and benchmark evidence
+work/linux-benchmarks/
