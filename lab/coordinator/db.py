@@ -138,6 +138,11 @@ class Database:
     def create_job(self, shards, backend, provenance, budget_worker_hours, request='', max_attempts=3):
         now = self._now()
         job_id = uuid.uuid4().hex[:12]
+        git_commit = str((provenance or {}).get('git_commit') or '')
+        if len(git_commit) != 40 or any(ch not in '0123456789abcdef' for ch in git_commit.lower()):
+            git_commit = None
+        else:
+            git_commit = git_commit.lower()
         projected = 0.0
         for spec in shards:
             projected += float(spec.get('estimated_seconds') or 0) / 3600
@@ -149,8 +154,8 @@ class Database:
         self.con.execute('BEGIN IMMEDIATE')
         try:
             self.con.execute(
-                'INSERT INTO jobs (id, request, status, backend, created, budget_worker_hours, provenance_json) VALUES (?,?,?,?,?,?,?)',
-                (job_id, request, 'queued', backend, now, float(budget_worker_hours), json.dumps(provenance)),
+                'INSERT INTO jobs (id, request, status, backend, created, budget_worker_hours, provenance_json, git_commit) VALUES (?,?,?,?,?,?,?,?)',
+                (job_id, request, 'queued', backend, now, float(budget_worker_hours), json.dumps(provenance), git_commit),
             )
             for index, spec in enumerate(shards):
                 shard_id = uuid.uuid4().hex[:12]
