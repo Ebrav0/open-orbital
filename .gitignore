@@ -22,3 +22,11 @@ work/queue-ui-data/
 
 # Node-local validation and benchmark evidence
 work/linux-benchmarks/
+
+# Lab coordinator state, secrets, and checkpoint scratch
+work/lab-data/
+
+# Local worktree symlinks
+work/venv
+work/openmp
+work/linux-benchmarks

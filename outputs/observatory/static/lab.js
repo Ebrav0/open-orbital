@@ -80,7 +80,7 @@ function drawCharts(points){drawSpark('chart-radius',points.map(p=>p.disk_half_r
 async function refreshHistory(){const j=target();if(!j){historyJob=null;historyFrames=-1;historyPoints=[];drawCharts([]);return}if(j.id===historyJob&&(j.status.frames||0)===historyFrames)return;historyJob=j.id;historyFrames=j.status.frames||0;try{historyPoints=(await api(`/api/jobs/${j.id}/history`)).points||[]}catch(e){historyPoints=[]}drawCharts(historyPoints)}
 function renderHealth(){const j=target();const s=j?.status||{};const daemon=system.daemon===true;$('health-daemon').textContent=daemon?'up (LaunchAgent)':'foreground / unknown';
 const sleep=system.sleep_prevention==='idle'||system.sleep_prevention==='on'?'on while integrating':'off';
-$('health-sleep').textContent=sleep;$('health-lid').textContent=system.lid_close_sleeps===false?'may stay awake':'still sleeps the Mac';
+$('health-sleep').textContent=sleep;$('health-lid').textContent=system.lid_close_sleeps===true?'lid close stops work':'check host policy';
 const capAt=s.wall_cap_at||WALL_CAP_HOURS*3600;const left=Math.max(0,capAt-(s.wall_seconds||0));
 $('health-cap').textContent=j?fmtSeconds(left):`${WALL_CAP_HOURS} h`;
 $('health-checkpoint').textContent=s.checkpoint_age_seconds==null?'—':s.checkpoint_age_seconds<90?`${Math.round(s.checkpoint_age_seconds)} s ago`:fmtSeconds(s.checkpoint_age_seconds)+' ago';

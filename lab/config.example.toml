@@ -1,0 +1,49 @@
+# Copy to work/lab-data/lab.toml to override. Absent keys keep these defaults.
+# Secrets are not stored here. They are read from work/lab-data/lab.env
+# and work/lab-data/rclone.conf.
+
+[server]
+host = "127.0.0.1"
+port = 8770
+# Set to this machine's Tailscale IPv4 so workers can connect. Empty keeps loopback only.
+tailscale_host = ""
+
+[limits]
+lease_seconds = 18000
+drain_margin_seconds = 600
+heartbeat_grace_seconds = 120
+checkpoint_interval_seconds = 300
+github_concurrency = 1
+github_concurrency_ceiling = 20
+local_concurrency = 1
+max_threads = 4
+max_ram_mib = 12288
+max_runtime_hours = 120
+max_total_runs = 500
+max_storage_gib = 100
+checkpoint_retention = 3
+budget_worker_hours = 40
+max_attempts = 3
+disk_floor_bytes = 2147483648
+
+[planner]
+decisions_url = "https://openrouter.ai/api/alpha/decisions"
+chat_url = "https://openrouter.ai/api/v1/chat/completions"
+luna_model = "openai/gpt-6-luna"
+jev_model = "typesafe/jev-1.13"
+luna_provider_sort = "price"
+noul_threshold = 0.7
+
+[storage]
+backend = "drive"
+rclone_remote = "labdrive"
+drive_folder = "Open Orbital Compute"
+
+[github]
+repo = "Ebrav0/open-orbital"
+workflow = "lab-worker.yml"
+ref = "lab-scheduler"
+
+[scheduler]
+default_backend = "local"
+poll_seconds = 10

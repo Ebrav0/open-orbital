@@ -20,7 +20,7 @@ function cloneSliders(i){return [
 ]}
 export const GALAXY_SLIDERS=[
   {id:'n',group:'Compute',label:'Gravitating particles',kind:'choice',stops:[10000,30000,100000,200000,500000,1000000],default:100000,unit:'superparticles',hint:'1,000,000 is the ceiling. Each dot is a superparticle, not one star. 2–5 galaxies share this budget. One million is live CPU N-body; the 120 h cap still applies, and Observe uses more GPU memory.'},
-  {id:'threads',group:'Compute',label:'CPU threads',kind:'choice',stops:[1,4,8,10,14],default:8,unit:'threads',hint:'Requested OpenMP team size. 14 uses all available CPU cores on this Mac; utilization varies during each step.'},
+  {id:'threads',group:'Compute',label:'CPU threads',kind:'choice',stops:[1,4,8,10,14],default:8,unit:'threads',hint:'Requested OpenMP team size. Requests above the host core count are capped; utilization varies during each step.'},
   {id:'duration',group:'Compute',label:'Simulation span',min:1,max:1200,step:1,default:10,unit:'model time units',physical:myr,hint:'Maximum updates live from the 120 h wall-time estimate as N, threads, dt and lifecycle change.'},
   {id:'seed',group:'Compute',label:'Random seed',kind:'number',min:0,max:4294967295,step:1,default:731,unit:'integer'},
   {id:'n_galaxies',group:'Encounter',label:'Live galaxies',kind:'choice',stops:[1,2,3,4,5],default:2,unit:'galaxies',hint:'1 = isolated revision-3 lab. 2–5 share the particle budget. Not a calibrated Local Group.'},

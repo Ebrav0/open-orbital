@@ -459,7 +459,7 @@ class Handler(BaseHTTPRequestHandler):
             if u.path=='/api/system':
                 pid=active_worker_pid()
                 return self.send(dict(cpu=cpu_label(),cores=os.cpu_count(),performance_cores=performance_cores(),engine='REBOUND 5.1.1 · CPU',data_directory=str(DATA),wall_cap_hours=WALL_CAP_HOURS,max_runs=MAX_RUNS,protected=sorted(PROTECTED),reference_seconds=REFERENCE_SECONDS,
-                    daemon=os.environ.get('OPENORBITAL_DAEMON')=='1',sleep_prevention='idle' if pid and shutil.which('caffeinate') else 'off',worker_pid=pid,lid_close_sleeps=sys.platform=='darwin'))
+                    daemon=os.environ.get('OPENORBITAL_DAEMON')=='1',sleep_prevention='idle' if pid and shutil.which('caffeinate') else 'off',worker_pid=pid,lid_close_sleeps=True if sys.platform=='darwin' else None))
             if u.path=='/api/schema':return self.send(dict(schema={k:dict(kind=v[0],allowed=v[1]) for k,v in SCHEMA.items()},defaults=DEFAULTS,galaxy_keys=GALAXY_KEYS,planet_keys=PLANET_KEYS))
             if len(parts)>=3 and parts[:2]==['api','jobs']:
                 p=folder(parts[2]);j=job(p)
