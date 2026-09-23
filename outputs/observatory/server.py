@@ -2,17 +2,26 @@
 # Keep loopback binding, input bounds, one-active-job checks, protected runs and existing run data.
 # SCHEMA here is the validation authority; static/shared.js mirrors it for the Compute page.
 """Loopback-only server and isolated CPU job manager. Stdlib HTTP, local assets."""
-import os,sys,json,re,time,subprocess,threading,uuid,argparse,signal,shutil,math,struct
+import os,sys,json,re,time,subprocess,threading,uuid,argparse,signal,shutil,math,struct,platform
 from pathlib import Path
 from http.server import ThreadingHTTPServer,BaseHTTPRequestHandler
 from urllib.parse import urlparse,parse_qs,unquote
 from worker import atomic
+from physics import effective_threads,performance_cores
 BASE=Path(__file__).resolve().parent
 DATA=Path(os.environ.get('OBSERVATORY_DATA',BASE.parents[1]/'work/observatory-data')).resolve();DATA.mkdir(parents=True,exist_ok=True)
 PROCESSES={};LOCK=threading.Lock()
 PROTECTED={'0e45a855ba11','44c528079f88','ff56d195ce89','58ab7c268cdd'}
 WALL_CAP_HOURS=120;MAX_RUNS=24;ACTIVE=['running','initializing','pausing']
 REFERENCE_SECONDS=157.84   # measured: 100,000 particles, 10 threads, 500 steps, model revision 2
+
+def cpu_label():
+    try:
+        for line in Path('/proc/cpuinfo').read_text().splitlines():
+            if line.startswith('model name'):
+                return line.split(':',1)[1].strip()
+    except OSError:pass
+    return platform.processor() or platform.machine()
 
 CLONE_AZIMUTH={2:0,3:120,4:240,5:180}
 # id -> (kind, allowed) where kind is 'choice', 'float', 'int', 'bool', 'list8'
@@ -99,6 +108,12 @@ def busy(except_id=None):
     return any(j['id']!=except_id and j['status']['phase'] in ACTIVE for j in jobs(True))
 
 def pid_running(pid):
+    # Linux keeps an exited process visible until its parent reaps it.
+    stat=Path(f'/proc/{pid}/stat')
+    if stat.exists():
+        try:
+            if stat.read_text().split(') ',1)[1][0]=='Z':return False
+        except (OSError,IndexError):pass
     try:os.kill(pid,0);return True
     except OSError:return False
 
@@ -135,8 +150,15 @@ def adopt(p):
     PROCESSES[p.name]=Adopted(pid);return True
 
 def spawn(p):
+    if alive(p.name):return
     if adopt(p):return
-    env=os.environ.copy();env['OMP_NUM_THREADS']=str(read(p/'config.json',{}).get('threads',1));env['OMP_WAIT_POLICY']='PASSIVE'
+    requested=int(read(p/'config.json',{}).get('threads',1) or 1)
+    env=os.environ.copy()
+    env['OMP_NUM_THREADS']=str(effective_threads(requested))
+    env['OMP_DYNAMIC']='false'
+    env['OMP_WAIT_POLICY']='PASSIVE'
+    env['OMP_PROC_BIND']='false'
+    env.pop('OMP_PLACES',None)
     cmd=[sys.executable,str(BASE/'worker.py'),str(p)]
     cafe=shutil.which('caffeinate')
     if cafe:cmd=[cafe,'-dims']+cmd
@@ -189,7 +211,8 @@ def estimate_seconds(cfg):
         return .25*cfg['duration']/12*(bodies/9)**2
     n=cfg['n'];steps=cfg['duration']/cfg['dt']
     extra=1.05 if int(cfg.get('n_galaxies') or 1)>1 else 1
-    return REFERENCE_SECONDS*(n/1e5)*math.log(n)/math.log(1e5)*(steps/500)*(10/cfg['threads'])*(1.15 if cfg.get('lifecycle_enabled') else 1)*extra
+    threads=effective_threads(cfg['threads'])
+    return REFERENCE_SECONDS*(n/1e5)*math.log(n)/math.log(1e5)*(steps/500)*(10/threads)*(1.15 if cfg.get('lifecycle_enabled') else 1)*extra
 
 def max_duration(cfg):
     trial=dict(cfg,duration=1.);per_unit=estimate_seconds(trial)
@@ -435,8 +458,8 @@ class Handler(BaseHTTPRequestHandler):
             if u.path=='/api/jobs':return self.send(jobs(summary=qs.get('view',[''])[0]=='summary'))
             if u.path=='/api/system':
                 pid=active_worker_pid()
-                return self.send(dict(cpu='Apple M4 Pro',cores=os.cpu_count(),engine='REBOUND 5.1.1 · CPU',data_directory=str(DATA),wall_cap_hours=WALL_CAP_HOURS,max_runs=MAX_RUNS,protected=sorted(PROTECTED),reference_seconds=REFERENCE_SECONDS,
-                    daemon=os.environ.get('OPENORBITAL_DAEMON')=='1',sleep_prevention='idle' if pid else 'off',worker_pid=pid,lid_close_sleeps=True))
+                return self.send(dict(cpu=cpu_label(),cores=os.cpu_count(),performance_cores=performance_cores(),engine='REBOUND 5.1.1 · CPU',data_directory=str(DATA),wall_cap_hours=WALL_CAP_HOURS,max_runs=MAX_RUNS,protected=sorted(PROTECTED),reference_seconds=REFERENCE_SECONDS,
+                    daemon=os.environ.get('OPENORBITAL_DAEMON')=='1',sleep_prevention='idle' if pid and shutil.which('caffeinate') else 'off',worker_pid=pid,lid_close_sleeps=True if sys.platform=='darwin' else None))
             if u.path=='/api/schema':return self.send(dict(schema={k:dict(kind=v[0],allowed=v[1]) for k,v in SCHEMA.items()},defaults=DEFAULTS,galaxy_keys=GALAXY_KEYS,planet_keys=PLANET_KEYS))
             if len(parts)>=3 and parts[:2]==['api','jobs']:
                 p=folder(parts[2]);j=job(p)

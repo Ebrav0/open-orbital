@@ -125,4 +125,4 @@ lz_a,lz_b=Lz(s,meta['galaxies'][0]),Lz(s,meta['galaxies'][1])
 results['retrograde_Lz']=dict(A=lz_a,B=lz_b)
 assert lz_a*lz_b<0
 
-out=Path(__file__).resolve().parents[1]/'validation_r4.json';out.write_text(json.dumps(results,indent=2));print(json.dumps(results,indent=2))
+out=Path(__import__('os').environ.get('OBSERVATORY_TEST_REPORT',Path(__file__).resolve().parents[1]/'validation_r4.json'));out.write_text(json.dumps(results,indent=2));print(json.dumps(results,indent=2))

@@ -1,0 +1,84 @@
+name: lab-worker
+
+on:
+  workflow_dispatch:
+    inputs:
+      coordinator_url:
+        description: Lab API base URL reachable through the tailnet
+        required: true
+        type: string
+      commit_sha:
+        description: Exact immutable Open Orbital source commit for the claimed experiment
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  worker:
+    runs-on: ubuntu-latest
+    timeout-minutes: 330
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.commit_sha }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Verify pinned source revision
+        shell: bash
+        env:
+          EXPECTED_COMMIT: ${{ inputs.commit_sha }}
+          TRUSTED_REF: ${{ github.ref_name }}
+        run: |
+          test "$(git rev-parse HEAD)" = "$EXPECTED_COMMIT"
+          git merge-base --is-ancestor "$EXPECTED_COMMIT" "refs/remotes/origin/$TRUSTED_REF"
+
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.14"
+          cache: pip
+          cache-dependency-path: outputs/observatory/requirements.txt
+
+      - name: Build the Linux OpenMP runtime
+        env:
+          CFLAGS: -fopenmp -DOPENMP -ffp-contract=off
+          LDFLAGS: -fopenmp
+        run: |
+          python -m pip install --disable-pip-version-check --no-cache-dir --requirement outputs/observatory/requirements.txt --no-binary=rebound
+          python -c 'import rebound; print(rebound.__version__)'
+          PYTHONPATH="$PWD/outputs/observatory" OMP_PROC_BIND=false python outputs/observatory/tests/validate_threads.py
+
+      - name: Install rclone
+        run: sudo apt-get update && sudo apt-get install -y rclone
+
+      - name: Join the tailnet
+        uses: tailscale/github-action@d1b6cd204f8dceda5b3eaad7f1f767be390056cd # v4.2.0
+        with:
+          authkey: ${{ secrets.TS_AUTHKEY }}
+          tags: tag:lab-worker
+          hostname: lab-${{ github.run_id }}
+
+      - name: Write the Drive config
+        shell: bash
+        env:
+          RCLONE_CONFIG: ${{ secrets.RCLONE_CONFIG }}
+        run: |
+          test -n "$RCLONE_CONFIG"
+          install -m 600 /dev/null "$RUNNER_TEMP/rclone.conf"
+          printf '%s\n' "$RCLONE_CONFIG" > "$RUNNER_TEMP/rclone.conf"
+
+      - name: Claim and run one shard
+        env:
+          LAB_URL: ${{ inputs.coordinator_url }}
+          LAB_EXPECTED_COMMIT: ${{ inputs.commit_sha }}
+          LAB_WORKER_TOKEN: ${{ secrets.LAB_WORKER_TOKEN }}
+          LAB_STORAGE: drive
+          LAB_RCLONE_CONFIG: ${{ runner.temp }}/rclone.conf
+          OMP_PROC_BIND: "false"
+        run: python -m lab worker --once --backend github
+
+      - name: Leave the tailnet
+        if: always()
+        run: tailscale logout || true

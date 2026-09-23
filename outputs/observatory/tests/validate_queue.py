@@ -69,6 +69,6 @@ with tempfile.TemporaryDirectory(prefix='orbital-queue-') as td:
         until(lambda:phase(g)=='complete')
         until(lambda:phase(h)=='complete')
         result=dict(order_persisted=True,reordered=True,restart_held=True,pause_blocks_next=True,hold_allows_current_to_finish=True,sequential_completion=True,queued_removal=True,error_holds_queue=True,explicit_continue_after_error=True,restart_keeps_enabled=True)
-        (APP/'queue_validation.json').write_text(json.dumps(result,indent=2));print(json.dumps(result))
+        Path(os.environ.get('OBSERVATORY_TEST_REPORT',APP/'queue_validation.json')).write_text(json.dumps(result,indent=2));print(json.dumps(result))
     finally:
         if proc and proc.poll() is None:proc.terminate();proc.wait(timeout=20)
