@@ -1,5 +1,6 @@
 """Hard limits. Planner output is checked here again before a job row exists."""
 import shutil
+import subprocess
 from pathlib import Path
 
 from lab.config import RUNTIME_CEILING_HOURS
@@ -33,18 +34,19 @@ def required_keys(mode):
 
 
 def git_commit(root: Path):
-    head = root / '.git' / 'HEAD'
     try:
-        text = head.read_text().strip()
-    except OSError:
+        commit = subprocess.run(
+            ['git', 'rev-parse', 'HEAD'],
+            cwd=root,
+            text=True,
+            capture_output=True,
+            check=True,
+        ).stdout.strip()
+    except (OSError, subprocess.CalledProcessError):
         return 'unknown'
-    if text.startswith('ref:'):
-        ref = root / '.git' / text.split(' ', 1)[1].strip()
-        try:
-            return ref.read_text().strip()
-        except OSError:
-            return 'unknown'
-    return text
+    if len(commit) == 40 and all(ch in '0123456789abcdef' for ch in commit.lower()):
+        return commit.lower()
+    return 'unknown'
 
 
 def provenance(root: Path, defaulted):
