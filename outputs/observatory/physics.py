@@ -1,7 +1,8 @@
 # AGENT MAP: model generators return (REBOUND Simulation, metadata, baryons-or-None).
 # Keep units, model_revision and diagnostics aligned. Never silently alter saved runs.
 # Every structural constant is a parameter with a default that reproduces model revision 2.
-# Isolated n_galaxies=1 still bit-matches revision 3; revision 4 is the generator stamp.
+# Isolated n_galaxies=1 still bit-matches revision 3 when revision=4 (the galaxy() default).
+# New runs pass revision=MODEL_REVISION (5): disk rotation from the thick, softened disk's real midplane pull.
 """CPU models for the local observatory. No remote services are used."""
 import os
 os.environ.setdefault('OMP_NUM_THREADS','1')
@@ -9,12 +10,24 @@ os.environ.setdefault('OMP_WAIT_POLICY','PASSIVE')
 import ctypes,math
 import numpy as np
 import rebound
-from scipy.special import iv,kv
+from scipy.special import iv,kv,j1
 from scipy.integrate import cumulative_trapezoid
+from scipy.interpolate import CubicSpline
 import stellar
 from stellar import MYR_PER_TIME,V_KMS
 
-MODEL_REVISION=4
+MODEL_REVISION=5
+# Revision 6 = "Real World Physics" (config realistic=True). Revision-5 runs are untouched by it.
+REALISTIC_REVISION=6
+ETA_TIMESTEP=.025            # GADGET-2 ErrTolIntAccuracy: dt <= sqrt(2 eta eps / |a|) for every particle
+DT_MAX_REALISTIC=.02         # never coarser than the standard 0.49 Myr step
+# Softening follows particle count, not disk thickness: measured 2026-09-29 (HANDOFF), a 22.5k-particle disk heats FASTER
+# with smaller softening (two-body scattering), in line with Athanassoula et al. 2000 and Dehnen 2001.
+SOFT_PER_SEPARATION=1.;EPS_FLOOR=.01;EPS_CEIL=.15
+HERNQUIST_PER_PLUMMER=1.3048/(1+math.sqrt(2))   # Hernquist a giving the same half-mass radius as the Plummer slider
+SIGMA_CAP_VC=.6              # revision 6 caps radial dispersion at 0.6 v_c instead of the fixed 0.35
+C_S_KMS=10.                  # isothermal 10^4 K ISM sound speed
+RMAX_HALO=100.
 MIN_PARTICLES_PER_GALAXY=256
 CLONE_AZIMUTH={2:0.,3:120.,4:240.,5:180.}
 
@@ -41,7 +54,7 @@ def _encounter_defaults():
 GALAXY_DEFAULTS=dict(n=100000,seed=731,theta=.4,dt=.02,softening=.06,
     disk_mass=1.,halo_mass=20.,disk_fraction=.3,disk_scale=1.2,disk_thickness=.08,halo_scale=4.,warmth=1.,smbh_mass=0.,
     lifecycle_enabled=True,gas_fraction=.2,t_sf=2.,lifecycle_speed=1.,sf_density_bias=.7,imf_mmin=.08,imf_mmax=100.,grow_rate=.2,sn_kick_kms=0.,
-    **_encounter_defaults())
+    revision=4,realistic=False,**_encounter_defaults())
 PLANET_DEFAULTS=dict(jupiter_mass=1.,planet_mass_scale=[1.]*8,perturber_mass=0.,perturber_a=2.5)
 
 def performance_cores():
@@ -60,13 +73,18 @@ def effective_threads(n):
     # Honor the selected team size; core class is a scheduling choice for macOS.
     return min(n,os.cpu_count() or n)
 
-def _set_qos_user_initiated():
-    """Request user-initiated scheduling priority; this does not pin cores."""
+WORKER_QOS={'user_initiated':0x19,'default':0x15,'utility':0x11}
+def _set_worker_qos():
+    """macOS scheduling class for the worker (OpenMP threads inherit it); a no-op elsewhere. Does not pin cores.
+    Default 'utility' ranks below the dashboard server and browser: measured 2026-09-28 at 200k × 14 threads,
+    worst render-probe stall 21 ms vs 108 ms with 'user_initiated', at ~10-25% more wall time per step.
+    OBSERVATORY_WORKER_QOS=user_initiated restores maximum speed."""
+    qos=WORKER_QOS.get(os.environ.get('OBSERVATORY_WORKER_QOS','utility'),WORKER_QOS['utility'])
     try:
         lib=ctypes.CDLL('/usr/lib/system/libsystem_pthread.dylib')
         lib.pthread_set_qos_class_self_np.argtypes=[ctypes.c_uint,ctypes.c_int]
         lib.pthread_set_qos_class_self_np.restype=ctypes.c_int
-        lib.pthread_set_qos_class_self_np(0x19,0)  # QOS_CLASS_USER_INITIATED
+        lib.pthread_set_qos_class_self_np(qos,0)
     except (OSError,AttributeError):
         pass
 
@@ -76,7 +94,7 @@ def set_threads(n):
     os.environ['OMP_DYNAMIC']='false'
     # Avoid forcing affinity on heterogeneous Apple cores; let macOS place the team.
     os.environ.setdefault('OMP_PROC_BIND','false')
-    _set_qos_user_initiated()
+    _set_worker_qos()
     try:
         omp=ctypes.CDLL('/opt/homebrew/opt/libomp/lib/libomp.dylib')
         omp.omp_set_dynamic(0);omp.omp_set_num_threads(n)
@@ -107,6 +125,18 @@ def apply_tree_box(s,margin=4.0):
     s.root_size=max(TREE_ROOT_DEFAULT,2.0*extent*margin)
     return float(s.root_size)
 
+def ensure_tree_box_for_step(s,q=None):
+    """Grow the root before a leapfrog step so the tree built at the half-step drift (x + v dt/2) holds every
+    particle. REBOUND otherwise stops inserting at the first outside particle and still finishes the step with
+    that partial tree (every later particle exerts no gravity), raising only afterwards. Returns the root size."""
+    if s.N<=0:return float(s.root_size or TREE_ROOT_DEFAULT)
+    if q is None:q,_=arrays(s)
+    reach=float(np.max(np.abs(q[:,:3]+.5*s.dt*q[:,3:])))
+    size=float(s.root_size or TREE_ROOT_DEFAULT)
+    if reach<.5*size*(1-1e-9):return size
+    s.root_size=max(size,2.0*reach*4.0)
+    return float(s.root_size)
+
 def arrays(s):
     q=np.empty((s.N,6),dtype=np.float64);m=np.empty(s.N)
     s.serialize_particle_data(xyzvxvyvz=q,m=m)
@@ -120,8 +150,11 @@ def galaxy_params(overrides=None):
     for k,v in (overrides or {}).items():
         if k in P and v is not None:P[k]=v
     P['lifecycle_enabled']=bool(P['lifecycle_enabled']);P['n']=int(P['n']);P['seed']=int(P['seed'])
-    P['n_galaxies']=int(P.get('n_galaxies') or 1)
+    P['n_galaxies']=int(P.get('n_galaxies') or 1);P['revision']=int(P['revision'])
     if not 1<=P['n_galaxies']<=5:raise ValueError('n_galaxies must be between 1 and 5')
+    if P['revision'] not in (4,5,6):raise ValueError('revision must be 4, 5 or 6')
+    P['realistic']=bool(P.get('realistic')) or P['revision']==REALISTIC_REVISION
+    if P['realistic']:P['revision']=REALISTIC_REVISION;P['lifecycle_enabled']=True;P['lifecycle_speed']=1.
     for i in range(2,6):P[f'g{i}_spin']=int(P[f'g{i}_spin'])
     return P
 
@@ -159,27 +192,46 @@ def _apply_spin(pos,vel,spin):
     vr=(x*vx+y*vy)/r;vphi=(-y*vx+x*vy)/r*spin
     vel[ok,0]=vr*x/r-vphi*y/r;vel[ok,1]=vr*y/r+vphi*x/r
 
+def disk_midplane_vc2(rad,Md,Rd,zd,eps):
+    """R * inward midplane pull of an exponential disk (scale Rd) with a Gaussian vertical profile (sigma zd),
+    as felt under REBOUND's Plummer softening eps. A softened pair at vertical offset z' has the same potential as
+    an unsoftened one at offset sqrt(z'^2+eps^2), so the thin-disk Hankel solution applies per quadrature height:
+    g_R(R) = 2 pi G int k J1(kR) S(k) <exp(-k sqrt(z'^2+eps^2))> dk,  S(k) = Md / (2 pi (1+k^2 Rd^2)^1.5).
+    Tends to the razor-thin Freeman curve as zd, eps -> 0 (checked against direct summation, see validate_physics.py)."""
+    rad=np.atleast_1d(np.asarray(rad,dtype=np.float64))
+    zq,wq=np.polynomial.hermite_e.hermegauss(48);wq=wq/wq.sum();h=np.sqrt((zq*zd)**2+eps*eps)
+    kmax=36./h.min();dk=min(.25/float(rad.max()),kmax/2000.)
+    k=np.arange(0.,kmax+dk,dk)
+    base=k*Md/(2*np.pi)/(1+(k*Rd)**2)**1.5*(np.exp(-np.outer(k,h))@wq)
+    return np.array([2*np.pi*r*np.trapezoid(base*j1(k*r),k) for r in rad])
+
 def build_one_galaxy(rng,n,P):
-    """Exponential disk + live Plummer halo (+ optional SMBH replacing one halo particle). No Simulation, no COM shift."""
+    """Exponential disk + live Plummer halo (+ optional SMBH replacing one halo particle). No Simulation, no COM shift.
+    revision 4: disk rotation from the razor-thin, unsoftened Freeman curve and the untruncated halo mass (reproduces
+    revisions 2-4 bit for bit). revision 5: rotation from the thick, softened disk's real midplane pull, and halo
+    dynamics use the mass the truncated (r<100) halo actually has inside each radius."""
     n=int(n);Md=float(P['disk_mass']);Mh=float(P['halo_mass']);Rd=float(P['disk_scale']);zd=float(P['disk_thickness']);a=float(P['halo_scale'])
-    warm=float(P['warmth']);Mbh=float(P['smbh_mass']);eps=float(P['softening'])
+    warm=float(P['warmth']);Mbh=float(P['smbh_mass']);eps=float(P['softening']);rev=int(P.get('revision',4))
     nd=int(n*float(P['disk_fraction']));nbh=1 if Mbh>0 else 0;nh=n-nd-nbh
     if nh<0:raise ValueError('Galaxy particle budget cannot fit the requested disk fraction and black hole')
+    rmax=100.
+    # All Mh sits inside rmax, so interior Plummer mass is Mh/f with f the untruncated fraction inside rmax.
+    Mh_pot=Mh if rev<5 else Mh*(rmax*rmax+a*a)**1.5/rmax**3
     if nh:
-        rmax=100.;u=rng.uniform(1e-9,rmax**3/(rmax**2+a*a)**1.5,nh)
+        u=rng.uniform(1e-9,rmax**3/(rmax**2+a*a)**1.5,nh)
         r=a/np.sqrt(u**(-2/3)-1);hp=directions(rng,nh)*r[:,None]
         q=np.empty(nh);done=0
         while done<nh:
             candidate=rng.random((nh-done)*3+16);y=rng.random(len(candidate))*.1
             good=candidate[y<candidate**2*(1-candidate**2)**3.5]
             k=min(len(good),nh-done);q[done:done+k]=good[:k];done+=k
-        hv=directions(rng,nh)*(q*np.sqrt(2*Mh/np.sqrt(r*r+a*a)))[:,None]
+        hv=directions(rng,nh)*(q*np.sqrt(2*Mh_pot/np.sqrt(r*r+a*a)))[:,None]
         grid=np.geomspace(1e-5,1e5,10000);rho=(1+(grid/a)**2)**-2.5
         enclosed=Md*(1-(1+grid/Rd)*np.exp(-grid/Rd))+Mbh
         integrand=rho*enclosed/grid**2
         integral=-cumulative_trapezoid(integrand[::-1],grid[::-1],initial=0)[::-1]
         extra=np.interp(r,grid,integral/rho)
-        sigma_h=Mh/(6*np.sqrt(r*r+a*a))
+        sigma_h=Mh_pot/(6*np.sqrt(r*r+a*a))
         hv*=np.sqrt(1+extra/sigma_h)[:,None]
     else:
         hp=np.zeros((0,3));hv=np.zeros((0,3));r=np.zeros(0)
@@ -189,7 +241,13 @@ def build_one_galaxy(rng,n,P):
         mask=R>rdisk_max;R[mask]=rng.gamma(2,Rd,np.sum(mask))
     phi=rng.uniform(0,2*np.pi,nd) if nd else np.zeros(0);z=rng.normal(0,zd,nd) if nd else np.zeros(0)
     dp=np.column_stack((R*np.cos(phi),R*np.sin(phi),z)) if nd else np.zeros((0,3))
+    if rev>=5 and nd:
+        table_r=np.geomspace(1e-3,1.01*rdisk_max,160)
+        disk_spline=CubicSpline(np.log(table_r),disk_midplane_vc2(table_r,Md,Rd,zd,eps))
     def vc2(rad):
+        if rev>=5:
+            disk=disk_spline(np.log(np.clip(rad,1e-3,1.01*rdisk_max))) if nd else 0.
+            return Mh_pot*rad*rad/(rad*rad+a*a)**1.5+disk+Mbh*rad*rad/(rad*rad+eps*eps)**1.5
         y=np.maximum(rad/(2*Rd),1e-5)
         return Mh*rad*rad/(rad*rad+a*a)**1.5+2*Md/Rd*y*y*(iv(0,y)*kv(0,y)-iv(1,y)*kv(1,y))+Mbh*rad*rad/(rad*rad+eps*eps)**1.5
     def surface_density(rad):return Md*np.exp(-rad/Rd)/(2*np.pi*Rd**2)
@@ -208,7 +266,7 @@ def build_one_galaxy(rng,n,P):
         dlog=-rr/Rd+(sigma_r(rr*1.001)**2-sigma_r(rr*.999)**2)/(.002*sigmaR**2)
         vmean=np.sqrt(np.maximum(v2+sigmaR**2*(1-sigmaPhi**2/sigmaR**2+dlog),.05*v2))
         vr=rng.normal(size=nd)*sigmaR;vp=vmean+rng.normal(size=nd)*sigmaPhi
-        vertical_frequency=np.sqrt(Mh/(rr*rr+a*a)**1.5+Mbh/(rr*rr+eps*eps)**1.5+4*np.pi*surface/(np.sqrt(2*np.pi)*zd))
+        vertical_frequency=np.sqrt(Mh_pot/(rr*rr+a*a)**1.5+Mbh/(rr*rr+eps*eps)**1.5+4*np.pi*surface/(np.sqrt(2*np.pi)*zd))
         vz=rng.normal(size=nd)*zd*vertical_frequency
         dv=np.column_stack((vr*np.cos(phi)-vp*np.sin(phi),vr*np.sin(phi)+vp*np.cos(phi),vz))
     else:
@@ -217,6 +275,188 @@ def build_one_galaxy(rng,n,P):
     if nbh:
         pos=np.vstack((pos,np.zeros((1,3))));vel=np.vstack((vel,np.zeros((1,3))));mass=np.r_[mass,Mbh]
     return dict(pos=pos,vel=vel,mass=mass,disk_count=nd,halo_count=nh,smbh_count=nbh)
+
+# ---------- model revision 6 ("Real World Physics") initial conditions ----------
+def _hernquist(P):
+    """Tapered Hernquist halo: rho = rho_H(r) - rho_H(RMAX_HALO) inside RMAX_HALO, zero outside, holding halo_mass.
+    The taper makes the density reach zero at the edge, which an equilibrium isotropic halo requires (an abrupt cut
+    leaves the outer ~40% of the radius too cold). Returns (a, M', rho_edge) with M' the Hernquist normalisation."""
+    a=HERNQUIST_PER_PLUMMER*float(P['halo_scale']);Mh=float(P['halo_mass']);R=RMAX_HALO
+    Mp=Mh/(R*R/(R+a)**2-2/3*a*R*R/(R+a)**3)
+    return a,Mp,Mp*a/(2*np.pi*R*(R+a)**3)
+
+def halo_rho(r,a,Mp,re):
+    r=np.maximum(np.asarray(r,dtype=np.float64),1e-12)
+    return np.where(r<RMAX_HALO,np.maximum(Mp*a/(2*np.pi*r*(r+a)**3)-re,0.),0.)
+
+def halo_mass(r,a,Mp,re):
+    r=np.minimum(np.maximum(np.asarray(r,dtype=np.float64),0.),RMAX_HALO)
+    return Mp*(r*r/(r+a)**2-2/3*a*r**3/(RMAX_HALO*(RMAX_HALO+a)**3))
+
+def halo_psi(r,a,Mp,re):
+    """Psi = M(<r)/r + int_r^R 4 pi r' rho dr' for the tapered halo (zero at infinity)."""
+    r=np.maximum(np.asarray(r,dtype=np.float64),1e-12);R=RMAX_HALO
+    inside=halo_mass(r,a,Mp,re)/r+Mp*a*(1/(r+a)**2-1/(R+a)**2)-2*np.pi*re*(R*R-r*r)
+    return np.where(r<R,inside,halo_mass(R,a,Mp,re)/r)
+
+def _halo_psi_softened(rg,a,Mp,re,eps):
+    """Psi of the tapered halo under Plummer softening eps: for a spherical shell of radius r', the softened potential at r
+    is 2 pi G rho r'^2 dr' [sqrt((r+r')^2+eps^2) - sqrt((r-r')^2+eps^2)] / (r r'). Tends to halo_psi as eps -> 0."""
+    rp=np.geomspace(1e-6*a,RMAX_HALO,4000);wq=2*np.pi*halo_rho(rp,a,Mp,re)*rp*np.gradient(rp)
+    out=np.empty(len(rg))
+    for i in range(0,len(rg),400):
+        r=rg[i:i+400,None];out[i:i+400]=(wq*(np.sqrt((r+rp)**2+eps*eps)-np.sqrt((r-rp)**2+eps*eps))).sum(1)/rg[i:i+400]
+    return out
+
+def _psi_total(r,P,eps):
+    """Relative potential Psi=-Phi (G=1) of one galaxy: tapered Hernquist halo + spherically averaged exponential disk
+    + softened central black hole. Used only to build the halo's distribution function."""
+    a,Mp,re=_hernquist(P);Md=float(P['disk_mass']);Rd=float(P['disk_scale']);Mbh=float(P['smbh_mass'])
+    r=np.maximum(np.asarray(r,dtype=np.float64),1e-12)
+    disk=Md*(1-(1+r/Rd)*np.exp(-r/Rd))/r+Md/Rd*np.exp(-r/Rd)
+    return halo_psi(r,a,Mp,re)+disk+Mbh/np.sqrt(r*r+eps*eps)
+
+def eddington_speeds(rng,r,P,eps):
+    """Isotropic speeds for halo particles at radii r from Eddington's inversion f(E) of the Hernquist density in the
+    galaxy's total potential, so the live halo starts in equilibrium with its disk and black hole (revision 5 scaled an
+    isolated-Plummer distribution instead). Energies are measured from the truncation radius, so every particle is bound
+    inside it."""
+    a,Mp,re=_hernquist(P)
+    rg=np.geomspace(1e-6*a,RMAX_HALO,6000)
+    rho=halo_rho(rg,a,Mp,re)
+    # The halo's own potential is the Plummer-softened one the particles feel (Barnes 2012); the Newtonian cusp potential
+    # would make the inner halo too hot for softened forces and it expands.
+    full=_psi_total(rg,P,eps)-halo_psi(rg,a,Mp,re)+(_halo_psi_softened(rg,a,Mp,re,eps) if eps>0 else halo_psi(rg,a,Mp,re))
+    psi=full-full[-1];psi0=float(psi[0]+(psi[0]-psi[1]))     # rg[-1] is the edge; psi0 just above the centre value
+    ps=psi[::-1][1:];rs=rho[::-1][1:]                       # ascending Psi, drop the Psi=0 edge point
+    drho=np.maximum(np.gradient(rs,ps),1e-300)
+    # Interpolate on logit(Psi/psi0): resolves both the cusp (Psi -> psi0, drho/dPsi ~ (psi0-Psi)^-2) and the edge.
+    lg=lambda y:np.log(np.maximum(y,1e-300))-np.log(np.maximum(psi0-y,1e-300))
+    qp,ld=lg(ps),np.log(drho)
+    E=np.unique(np.concatenate((np.geomspace(ps[0],.5*psi0,1500),psi0*(1-np.geomspace(1e-9,.5,1500)))))
+    E=E[E<=ps[-1]]
+    # G(E) = int_0^E (drho/dPsi) dPsi/sqrt(E-Psi) = 2 int_0^sqrt(E) g(E - tau^2) dtau, tau log-spaced so the narrow
+    # peak at tau -> 0 (width ~ sqrt(psi0-E)) is resolved near the centre.
+    tau=np.sqrt(E)[:,None]*np.geomspace(1e-7,1,500)[None,:]
+    g=np.exp(np.interp(lg(E[:,None]-tau**2),qp,ld))
+    G=2*(g[:,0]*tau[:,0]+np.trapezoid(g,tau,axis=1))
+    f=np.maximum(np.gradient(G,E),0.)/(np.sqrt(8)*np.pi**2)
+    qE,lf=lg(E),np.log(np.maximum(f,1e-300))
+    psi_r=np.interp(r,rg,psi)
+    # One speed table per quantile of the particles' own Psi, so rows follow where particles are.
+    # Speed fraction x = v/v_esc = sin(theta). Below the grid f follows its edge form f(E0) sqrt(E0/E)
+    # (G ~ 2 drho(0) sqrt(E) because the tapered density reaches zero linearly); in theta that tail is finite.
+    rows=np.unique(np.quantile(psi_r,np.linspace(0,1,1025)));th=np.linspace(0,np.pi/2,1601);xg=np.sin(th)
+    ee=np.maximum(rows[:,None]*np.cos(th)[None,:]**2,1e-300)
+    fe=np.where(ee>=E[0],np.exp(np.interp(lg(ee),qE,lf)),f[0]*np.sqrt(E[0]/ee))
+    pdf=xg[None,:]**2*fe*np.cos(th)[None,:];pdf[:,-1]=pdf[:,-2]
+    cdf=np.concatenate((np.zeros((len(rows),1)),np.cumsum(.5*(pdf[:,1:]+pdf[:,:-1])*np.diff(th),axis=1)),axis=1)
+    cdf/=np.maximum(cdf[:,-1:],1e-300)
+    row=np.clip(np.searchsorted(rows,psi_r),1,len(rows)-1);row-=(psi_r-rows[row-1])<(rows[row]-psi_r)
+    u=rng.random(len(r));xs=np.zeros(len(r))
+    for k in np.unique(row):
+        sel=row==k;xs[sel]=np.interp(u[sel],cdf[k],xg)
+    return xs*np.sqrt(2*np.maximum(psi_r,0.))
+
+def build_one_galaxy_r6(rng,n,P):
+    """Revision 6: exponential stellar disk + cold isothermal gas disk + live Hernquist halo in Eddington equilibrium
+    (+ optional central black hole). Gas is the first round(nd*gas_fraction) disk particles, matching stellar.new_baryons_ssp."""
+    n=int(n);Md=float(P['disk_mass']);Mh=float(P['halo_mass']);Rd=float(P['disk_scale']);zd=float(P['disk_thickness'])
+    warm=float(P['warmth']);Mbh=float(P['smbh_mass']);eps=float(P['softening'])
+    nd=int(n*float(P['disk_fraction']));nbh=1 if Mbh>0 else 0;nh=n-nd-nbh
+    if nh<0:raise ValueError('Galaxy particle budget cannot fit the requested disk fraction and black hole')
+    ng=int(round(nd*float(P['gas_fraction']))) if P.get('lifecycle_enabled') else 0
+    a,Mp,re=_hernquist(P)
+    if nh:
+        rt=np.concatenate(([0.],np.geomspace(1e-6*a,RMAX_HALO,20000)));mt=halo_mass(rt,a,Mp,re);mt/=mt[-1]
+        r=np.interp(rng.uniform(0,1,nh),mt,rt)
+        hp=directions(rng,nh)*r[:,None];hv=directions(rng,nh)*eddington_speeds(rng,r,P,eps)[:,None]
+    else:hp=np.zeros((0,3));hv=np.zeros((0,3))
+    rdisk_max=max(10.,7*Rd)
+    R=rng.gamma(2,Rd,nd) if nd else np.zeros(0)
+    while nd and np.any(R>rdisk_max):
+        mask=R>rdisk_max;R[mask]=rng.gamma(2,Rd,np.sum(mask))
+    phi=rng.uniform(0,2*np.pi,nd);z=rng.normal(0,zd,nd)
+    table_r=np.geomspace(1e-3,1.01*rdisk_max,160)
+    disk_spline=CubicSpline(np.log(table_r),disk_midplane_vc2(table_r,Md,Rd,zd,eps)) if nd else None
+    def vc2(rad):
+        disk=disk_spline(np.log(np.clip(rad,1e-3,1.01*rdisk_max))) if nd else 0.
+        return halo_mass(rad,a,Mp,re)/rad+disk+Mbh*rad*rad/(rad*rad+eps*eps)**1.5
+    def surface_density(rad):return Md*np.exp(-rad/Rd)/(2*np.pi*Rd**2)
+    def sigma_r(rad):
+        vv=vc2(rad);dd=(vc2(rad*1.001)-vc2(rad*.999))/(rad*.002)
+        kk=np.maximum(dd/rad+2*vv/rad**2,1e-8)
+        return np.clip(warm*1.5*3.36*surface_density(rad)/np.sqrt(kk),.015,np.maximum(SIGMA_CAP_VC*np.sqrt(np.maximum(vv,0.)),.015))
+    dv=np.zeros((nd,3))
+    if nd:
+        rr=np.maximum(R,.001);v2=vc2(rr);omega2=v2/rr**2
+        kappa2=np.maximum((vc2(rr*1.001)-vc2(rr*.999))/(rr*.002)/rr+2*omega2,1e-8)
+        surface=surface_density(rr);nu=np.sqrt(halo_mass(rr,a,Mp,re)/rr**3+Mbh/(rr*rr+eps*eps)**1.5+4*np.pi*surface/(np.sqrt(2*np.pi)*zd))
+        sigmaR=sigma_r(rr);sigmaPhi=sigmaR*np.sqrt(kappa2/(4*omega2))
+        dlog=-rr/Rd+(sigma_r(rr*1.001)**2-sigma_r(rr*.999)**2)/(.002*sigmaR**2)
+        vmean=np.sqrt(np.maximum(v2+sigmaR**2*(1-sigmaPhi**2/sigmaR**2+dlog),.05*v2))
+        vr=rng.normal(size=nd)*sigmaR;vp=vmean+rng.normal(size=nd)*sigmaPhi;vz=rng.normal(size=nd)*zd*nu
+        if ng:
+            # Cold gas: sound speed dispersion, rotation reduced by the pressure gradient of an exponential layer,
+            # hydrostatic thickness c_s/nu (not thinner than half the softening, which gravity cannot resolve).
+            cs=C_S_KMS/V_KMS;g=slice(0,ng)
+            z[g]=rng.normal(size=ng)*np.maximum(cs/nu[g],.5*eps)
+            vr[g]=rng.normal(size=ng)*cs;vz[g]=rng.normal(size=ng)*cs
+            vp[g]=np.sqrt(np.maximum(v2[g]-cs*cs*rr[g]/Rd,.05*v2[g]))+rng.normal(size=ng)*cs
+        dv=np.column_stack((vr*np.cos(phi)-vp*np.sin(phi),vr*np.sin(phi)+vp*np.cos(phi),vz))
+    dp=np.column_stack((R*np.cos(phi),R*np.sin(phi),z)) if nd else np.zeros((0,3))
+    pos=np.vstack((dp,hp));vel=np.vstack((dv,hv));mass=np.r_[np.full(nd,Md/nd) if nd else np.zeros(0),np.full(nh,Mh/nh) if nh else np.zeros(0)]
+    if nbh:
+        pos=np.vstack((pos,np.zeros((1,3))));vel=np.vstack((vel,np.zeros((1,3))));mass=np.r_[mass,Mbh]
+    return dict(pos=pos,vel=vel,mass=mass,disk_count=nd,halo_count=nh,smbh_count=nbh,gas_count=ng)
+
+def galaxy_param_list(P):
+    out=[P]
+    for k in range(2,int(P['n_galaxies'])+1):out.append(_clone_params(P,float(P[f'g{k}_mass_ratio']),float(P[f'g{k}_size_ratio'])))
+    return out
+
+def realistic_settings(P):
+    """Revision 6 numerics chosen from accuracy criteria, not sliders. Softening resolves the thinnest disk
+    (<= half its scale height). The starting step obeys dt <= sqrt(2 eta eps / a_max) with a_max an upper bound on the
+    initial acceleration (halo cusp + peak disk pull + softened black hole); the worker then re-evaluates the step from
+    the measured accelerations and the gas Courant condition every step."""
+    Ps=galaxy_param_list(P)   # P: a galaxy_params() dict
+    counts=split_particle_counts(P['n'],[float(Q['disk_mass'])+float(Q['halo_mass'])+float(Q['smbh_mass']) for Q in Ps])
+    seps=[_mean_separation(Q,c) for Q,c in zip(Ps,counts)]
+    eps=float(np.clip(SOFT_PER_SEPARATION*min(seps),EPS_FLOOR,EPS_CEIL))
+    amax=0.
+    for Q in Ps:
+        a,Mp,_=_hernquist(Q);Md=float(Q['disk_mass']);Rd=float(Q['disk_scale']);zd=float(Q['disk_thickness'])
+        R=np.geomspace(eps/4,6*Rd,40);g=float(np.max(disk_midplane_vc2(R,Md,Rd,zd,eps)/R))
+        amax=max(amax,Mp/a**2+g+.385*float(Q['smbh_mass'])/eps**2)   # .385 eps^-2 = peak of r/(r^2+eps^2)^1.5
+    dt=min(DT_MAX_REALISTIC,math.sqrt(2*ETA_TIMESTEP*eps/amax))
+    return dict(softening=eps,softening_requested=float(P['softening']),dt_initial=dt,dt_max=DT_MAX_REALISTIC,a_max=amax,eta=ETA_TIMESTEP,
+        counts=[int(c) for c in counts],mean_separation=[float(x) for x in seps],
+        softening_rule=f'{SOFT_PER_SEPARATION:g} x the mean particle spacing in the densest disk midplane at one scale length')
+
+def _mean_separation(Q,n):
+    """Mean interparticle spacing (disk + halo particles) in the disk midplane at R = Rd, revision-6 mass model."""
+    Md=float(Q['disk_mass']);Mh=float(Q['halo_mass']);Rd=float(Q['disk_scale']);zd=float(Q['disk_thickness'])
+    nd=max(1,int(n*float(Q['disk_fraction'])));nh=max(1,n-nd-(1 if float(Q['smbh_mass'])>0 else 0))
+    a,Mp,re=_hernquist(Q)
+    n_disk=Md*np.exp(-1)/(2*np.pi*Rd**2)/(np.sqrt(2*np.pi)*zd)/(Md/nd);n_halo=float(halo_rho(Rd,a,Mp,re))/(Mh/nh)
+    return float((n_disk+n_halo)**(-1/3))
+
+def heating_times(P,counts):
+    """Rough time (model units) for two-body scattering by the particles themselves to double each disk's vertical
+    velocity dispersion squared at R = Rd: t = sigma_z^2 / D, D = G^2 lnL sum_c(m_c rho_c) / (0.34 sigma_bg) with
+    sigma_bg = v_c/sqrt(2) (Binney & Tremaine 2008, eq. 7.106). A particle-noise horizon, not a stability proof."""
+    eps=float(P['softening']);out=[]
+    for Q,nc in zip(galaxy_param_list(P),counts):
+        Md=float(Q['disk_mass']);Mh=float(Q['halo_mass']);Rd=float(Q['disk_scale']);zd=float(Q['disk_thickness']);Mbh=float(Q['smbh_mass'])
+        nd=int(nc*float(Q['disk_fraction']));nh=max(1,nc-nd-(1 if Mbh>0 else 0));nd=max(nd,1)
+        if P['revision']>=6:a,Mp,re=_hernquist(Q);rho_h=float(halo_rho(Rd,a,Mp,re));M_in=float(halo_mass(Rd,a,Mp,re))
+        else:a=float(Q['halo_scale']);rho_h=3*Mh/(4*np.pi*a**3)*(1+Rd*Rd/a/a)**-2.5;M_in=Mh*Rd**3/(Rd*Rd+a*a)**1.5
+        sig=Md*np.exp(-1)/(2*np.pi*Rd**2);rho_d=sig/(np.sqrt(2*np.pi)*zd)
+        vc2=(M_in+Md*(1-2*np.exp(-1))+Mbh)/Rd;nu2=4*np.pi*rho_d+M_in/Rd**3
+        D=(Md/nd*rho_d+Mh/nh*rho_h)*max(1.,math.log(Rd/eps))/(.34*math.sqrt(vc2/2))
+        out.append(float(zd*zd*nu2/D))
+    return out
 
 def place_galaxy(block,sep,impact,vrel,azimuth,inclination,disk_tilt,spin):
     """Spin, tilt about x, then sky placement R=Rz(azimuth)@Ry(inclination) with bulk approach (-vrel,0,0)."""
@@ -252,6 +492,9 @@ def galaxy(n=100000,seed=731,theta=.4,dt=.02,**overrides):
     No artificial spiral pattern, damping, prescribed orbits, or frozen halo. Returns (sim, meta, baryons|None).
     """
     P=galaxy_params(dict(overrides,n=n,seed=seed,theta=theta,dt=dt))
+    realistic=P['realistic'];physics_info=None
+    if realistic:
+        physics_info=realistic_settings(P);P['softening']=physics_info['softening'];P['dt']=physics_info['dt_initial']
     n=P['n'];G=P['n_galaxies'];eps=float(P['softening']);theta=float(P['theta']);dt=float(P['dt'])
     Md=float(P['disk_mass']);Mh=float(P['halo_mass']);Mbh=float(P['smbh_mass']);M_A=Md+Mh+Mbh
     weights=[M_A]+[float(P[f'g{i}_mass_ratio'])*M_A for i in range(2,G+1)]
@@ -263,7 +506,7 @@ def galaxy(n=100000,seed=731,theta=.4,dt=.02,**overrides):
         else:
             k=i+1;mass_ratio=float(P[f'g{k}_mass_ratio']);size_ratio=float(P[f'g{k}_size_ratio'])
             Qi=_clone_params(P,mass_ratio,size_ratio)
-        block=build_one_galaxy(rngs[i],int(counts[i]),Qi)
+        block=(build_one_galaxy_r6 if realistic else build_one_galaxy)(rngs[i],int(counts[i]),Qi)
         if i:
             k=i+1
             block=place_galaxy(block,P[f'g{k}_sep'],P[f'g{k}_impact'],P[f'g{k}_vrel'],P[f'g{k}_azimuth'],P[f'g{k}_inclination'],P[f'g{k}_disk_tilt'],P[f'g{k}_spin'])
@@ -283,7 +526,8 @@ def galaxy(n=100000,seed=731,theta=.4,dt=.02,**overrides):
     for g in galaxies:
         sl=slice(g['start'],g['start']+g['n']);mw=m0[sl]
         g['com0']=np.average(q0[sl,:3],axis=0,weights=mw).tolist()
-    baryons=stellar.new_baryons(rngs[0],n,disk_mask,P) if P['lifecycle_enabled'] else None
+    if realistic:baryons=stellar.new_baryons_ssp(rngs[0],n,disk_mask,P,m0)
+    else:baryons=stellar.new_baryons(rngs[0],n,disk_mask,P) if P['lifecycle_enabled'] else None
     if baryons is not None:
         for g in galaxies:
             if g['smbh_count']:baryons['type'][g['start']+g['n']-1]=stellar.SMBH
@@ -298,13 +542,31 @@ def galaxy(n=100000,seed=731,theta=.4,dt=.02,**overrides):
         if P['lifecycle_enabled'] else ' Stellar lifecycle disabled: equal-mass collisionless disk.')
     isolated_text=' n_galaxies=1 is the isolated revision-3 lab (same distribution function; generator stamped revision 4).' if G==1 else ''
     camera=1.3*max(np.linalg.norm(g['com0']) for g in galaxies) if G>1 else None
-    meta=dict(mode='galaxy',model_revision=MODEL_REVISION,n=n,disk_count=nd,halo_count=nh,smbh_count=nbh,n_galaxies=G,galaxies=galaxies,title=title,
+    meta=dict(mode='galaxy',model_revision=P['revision'],n=n,disk_count=nd,halo_count=nh,smbh_count=nbh,n_galaxies=G,galaxies=galaxies,title=title,
       length_unit='kpc',length_scale=3,time_unit='Myr',time_scale=MYR_PER_TIME,mass_unit_solar=1e10,velocity_unit_kms=V_KMS,theta=theta,softening=eps,dt=dt,
       integrator='Leapfrog · tree gravity'+(' · stellar lifecycle' if P['lifecycle_enabled'] else ''),seed=P['seed'],params=P,lifecycle_enabled=P['lifecycle_enabled'],
       frame_layout='xyzsmt',bytes_per_particle=24,
       description='An exponential stellar disk in a live Plummer dark-matter halo. All particles gravitate. Warm disk with approximate Jeans support; not a calibrated equilibrium galaxy.'+lifecycle_text+isolated_text+encounter_text+' Each particle is a superparticle, not a resolved star.',
       sources=['https://rebound.hanno-rein.de/c_examples/selfgravity_plummer/','https://galaxiesbook.org/chapters/II-01.-Gravitation-in-Galactic-Disks_3-Gravitational-potentials-from-disk-density-distributions.html','https://ui.adsabs.harvard.edu/abs/2001MNRAS.322..231K'])
     if camera is not None:meta['camera_distance']=float(camera)
+    if realistic:
+        for g,b in zip(galaxies,blocks):g['gas_count']=int(b.get('gas_count',0))
+        physics_info.update(heating_times=heating_times(P,counts),c_s_kms=C_S_KMS,halo='Hernquist, Eddington distribution function',
+            sigma_cap_vc=SIGMA_CAP_VC,theta=theta)
+        meta.update(realistic=True,physics=physics_info,dt=physics_info['dt_initial'],
+            integrator='Leapfrog, adaptive global step · tree gravity · isothermal SPH gas · stellar populations',
+            description=('Real World Physics (model revision 6). Each galaxy: exponential stellar disk, cold gas disk and live Hernquist '
+              'dark-matter halo whose velocities come from Eddington\'s formula in the galaxy\'s total potential, so it starts in '
+              'equilibrium. Gas is isothermal (10^4 K) SPH with artificial viscosity; shocks dissipate energy, so gas can settle '
+              'and flow inward. Stars form from gas denser than 0.1 H/cm^3 at 1% per free-fall time. Each star particle is a '
+              'stellar population: it returns mass and drives core-collapse supernovae at the rates its Kroupa IMF implies, and '
+              'each supernova pushes neighbouring gas with 2.8e5 Msun km/s. Softening and a per-step timestep follow accuracy '
+              'criteria. Not included: cooling below 10^4 K, magnetic fields, cosmic rays, black-hole accretion and AGN feedback, '
+              'metals, cosmological infall. Particles are superparticles; two-body noise still heats disks over time '
+              '(see heating_times).'+encounter_text),
+            sources=meta['sources']+['https://ui.adsabs.harvard.edu/abs/2005MNRAS.364.1105S','https://ui.adsabs.harvard.edu/abs/1990ApJ...356..359H',
+              'https://ui.adsabs.harvard.edu/abs/2012ApJ...745...69K','https://ui.adsabs.harvard.edu/abs/2015ApJ...802...99K',
+              'https://ui.adsabs.harvard.edu/abs/1997JCoPh.136..298M'])
     return s,meta,baryons
 
 def planets(jupiter_mass=1,planet_mass_scale=None,perturber_mass=0.,perturber_a=2.5,**_):

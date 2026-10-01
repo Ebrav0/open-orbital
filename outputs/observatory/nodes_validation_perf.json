@@ -1,0 +1,154 @@
+{
+  "probe": {
+    "ready": true,
+    "rebound": "5.1.1",
+    "cores": 14
+  },
+  "dead_node_error": "Dead node is not ready: Dead node: tester@dead: Permission denied (publickey,password). \u2014 install this Mac's key on the node (ssh-copy-id), passwords are never used.",
+  "concurrent_nodes": true,
+  "remote_planets": {
+    "frames": 2401,
+    "energy_change": 1.173000893227898e-15,
+    "mirrored_bytes": 518616
+  },
+  "reference": {
+    "id": "c2b7f933b12b",
+    "frames": 151,
+    "wall_seconds": 40.680275707971305,
+    "sha256": "5beba0f9de102526"
+  },
+  "split_local_to_node": {
+    "id": "c4098310886c",
+    "segments": [
+      "local",
+      "fakenode"
+    ],
+    "frames": 151,
+    "identical_to_reference": true,
+    "zero_frames": [],
+    "transfer": {
+      "to": "fakenode",
+      "source": "local",
+      "state": "done",
+      "started_at": 1790644550.0853,
+      "error": null,
+      "seconds": 1.4,
+      "note": "Handed off at frame 46 from This Mac to Fake node."
+    }
+  },
+  "split_node_to_local": {
+    "id": "2c950f9ed5c8",
+    "segments": [
+      "fakenode",
+      "local"
+    ],
+    "frames": 151,
+    "identical_to_reference": true,
+    "zero_frames": [],
+    "transfer": {
+      "to": "local",
+      "source": "fakenode",
+      "state": "done",
+      "started_at": 1790644593.3561568,
+      "error": null,
+      "seconds": 0.4,
+      "note": "Handed off at frame 79 from Fake node to This Mac."
+    }
+  },
+  "manual_move_node_to_local": {
+    "id": "979d984b14eb",
+    "segments": [
+      "fakenode",
+      "local"
+    ],
+    "frames": 151,
+    "identical_to_reference": true,
+    "zero_frames": [],
+    "transfer": {
+      "to": "local",
+      "source": "fakenode",
+      "state": "done",
+      "started_at": 1790644604.828682,
+      "error": null,
+      "seconds": 0.4,
+      "note": "Handed off at frame 50 from Fake node to This Mac."
+    }
+  },
+  "chain_three_machines": {
+    "id": "a4d7fa1bfa06",
+    "segments": [
+      "local",
+      "fakenode",
+      "fakenode2"
+    ],
+    "frames": 151,
+    "identical_to_reference": true,
+    "zero_frames": [],
+    "transfer": {
+      "to": "fakenode2",
+      "source": "fakenode",
+      "state": "done",
+      "started_at": 1790644624.51619,
+      "error": null,
+      "seconds": 3.5,
+      "note": "Handed off at frame 112 from Fake node to Fake node 2."
+    }
+  },
+  "twin_a": {
+    "id": "64b7345454c1",
+    "segments": [
+      "local"
+    ],
+    "frames": 151,
+    "identical_to_reference": true,
+    "zero_frames": [],
+    "transfer": null
+  },
+  "twin_b": {
+    "id": "b4a18420263f",
+    "segments": [
+      "fakenode"
+    ],
+    "frames": 151,
+    "identical_to_reference": true,
+    "zero_frames": [],
+    "transfer": null
+  },
+  "twin_compare": {
+    "points": 151,
+    "max_divergence": 0.0,
+    "sample": 10000,
+    "nodes": [
+      "local",
+      "fakenode"
+    ]
+  },
+  "standby_pickup": {
+    "id": "f43bea4bd01b",
+    "segments": [
+      "local",
+      "fakenode",
+      "local"
+    ],
+    "frames": 226,
+    "identical_to_reference": true,
+    "zero_frames": [],
+    "transfer": {
+      "to": "local",
+      "source": "fakenode",
+      "state": "done",
+      "started_at": 1790644702.17787,
+      "error": null,
+      "seconds": 3.5,
+      "note": "Handed off at frame 126 from Fake node to This Mac."
+    },
+    "frozen_at_frame": 99,
+    "picked_up_at_index": 95,
+    "heartbeat_age": 11.0,
+    "note": "Fake node picked this run up at frame 95 after this Mac was silent for 11.0 s.",
+    "returned_to_mac": true
+  },
+  "remote_removed": true,
+  "elapsed_seconds": 232.5,
+  "ok": true
+}

@@ -1,0 +1,23 @@
+{
+  "timestamp": "2026-09-22T21:13:52-0400",
+  "host": "Mac",
+  "cpu": "arm",
+  "commit": "33709a5a96c4443e2740cf8a276cb7ed81bd80a0",
+  "model_revision": 4,
+  "rebound_version": "5.1.1",
+  "rebound_library": "/Users/emmanuelbravo/Desktop/Open Orbital/work/openmp/librebound.cpython-314-darwin.so",
+  "n": 200000,
+  "n_galaxies": 2,
+  "threads_requested": 4,
+  "threads_used": 4,
+  "setup_seconds": 0.6315852910047397,
+  "setup_cpu_seconds": 0.6313789999999999,
+  "cold_step_seconds": 1.0868219169788063,
+  "timed_steps": 3,
+  "timed_seconds": 3.3162955000298098,
+  "seconds_per_step": 1.10543183334327,
+  "cpu_wall_ratio": 3.827284993115333,
+  "peak_rss_mib": 212.328125,
+  "finite": true,
+  "simulation_steps": 4
+}

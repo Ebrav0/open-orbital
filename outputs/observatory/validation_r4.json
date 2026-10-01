@@ -45,7 +45,7 @@
   },
   "lifecycle_speed40_2048": {
     "steps": 500,
-    "wall_seconds": 1.25508124998305,
+    "wall_seconds": 1.2692807499552146,
     "mass_drift": 0.0,
     "baryon_mass_drift": 2.2204460492503126e-16,
     "counts": {

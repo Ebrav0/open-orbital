@@ -1,4 +1,4 @@
-// AGENT MAP: schema + helpers shared by the Compute page (lab.js) and the Observe page (app.js).
+// AGENT MAP: schema + helpers for the single-page observatory (app.js). viewer.js owns all WebGL.
 // Must never import three or touch WebGL. Bounds mirror SCHEMA in server.py; the server is the authority.
 export const WALL_CAP_HOURS=120,REFERENCE_SECONDS=157.84,MYR_PER_TIME=24.5;
 export const PROTECTED_IDS=['0e45a855ba11','44c528079f88','ff56d195ce89','58ab7c268cdd'];
@@ -18,7 +18,10 @@ function cloneSliders(i){return [
   {id:`g${i}_disk_tilt`,group:`Galaxy ${i}`,galaxy:i,label:'Disk tilt',min:0,max:180,step:5,default:0,unit:'deg',hint:'Extra galaxy’s own disk, after spin, before sky placement.'},
   {id:`g${i}_spin`,group:`Galaxy ${i}`,galaxy:i,label:'Disk spin',kind:'choice',stops:[1,-1],labels:['Prograde','Retrograde'],default:1,unit:'',hint:'+1 with Galaxy A; −1 flips in-plane rotation.'}
 ]}
+// Real World Physics (model revision 6) replaces these sliders with physically set values; the Physics tab explains each.
+export const REALISTIC_SUPERSEDED=['dt','softening','lifecycle_enabled','t_sf','lifecycle_speed','sf_density_bias','grow_rate','sn_kick_kms'];
 export const GALAXY_SLIDERS=[
+  {id:'realistic',group:'Physics',label:'Real World Physics',kind:'bool',default:false,hint:'Model revision 6: SPH gas, star formation, supernova feedback, equilibrium halos, accuracy-limited step. Shown on the Physics tab.'},
   {id:'n',group:'Compute',label:'Gravitating particles',kind:'choice',stops:[10000,30000,100000,200000,500000,1000000],default:100000,unit:'superparticles',hint:'1,000,000 is the ceiling. Each dot is a superparticle, not one star. 2–5 galaxies share this budget. One million is live CPU N-body; the 120 h cap still applies, and Observe uses more GPU memory.'},
   {id:'threads',group:'Compute',label:'CPU threads',kind:'choice',stops:[1,4,8,10,14],default:8,unit:'threads',hint:'Requested OpenMP team size. 14 uses all available CPU cores on this Mac; utilization varies during each step.'},
   {id:'duration',group:'Compute',label:'Simulation span',min:1,max:1200,step:1,default:10,unit:'model time units',physical:myr,hint:'Maximum updates live from the 120 h wall-time estimate as N, threads, dt and lifecycle change.'},
@@ -57,7 +60,10 @@ export function slidersFor(mode){return mode==='galaxy'?GALAXY_SLIDERS:PLANET_SL
 export function defaultsFor(mode){const out={};slidersFor(mode).forEach(s=>out[s.id]=s.default);return out}
 export function toConfig(mode,values){const cfg={mode};const scale=[1,1,1,1,1,1,1,1];slidersFor(mode).forEach(s=>{const v=values[s.id]??s.default;if(s.path){scale[s.path[1]]=Number(v)}else cfg[s.id]=s.kind==='bool'?Boolean(v):Number(v)});if(mode==='planets')cfg.planet_mass_scale=scale;return cfg}
 export function fromConfig(mode,cfg){const out=defaultsFor(mode);slidersFor(mode).forEach(s=>{if(s.path){const arr=cfg[s.path[0]];if(Array.isArray(arr)&&arr[s.path[1]]!=null)out[s.id]=arr[s.path[1]]}else if(cfg[s.id]!=null)out[s.id]=cfg[s.id]});if(mode==='galaxy'&&cfg.n_galaxies==null)out.n_galaxies=1;return out}
-export function estimateSeconds(cfg){if(cfg.mode==='planets'){const bodies=cfg.perturber_mass>0?10:9;return .25*cfg.duration/12*(bodies/9)**2}const n=cfg.n,steps=cfg.duration/cfg.dt;const threads=cfg.threads;return REFERENCE_SECONDS*(n/1e5)*Math.log(n)/Math.log(1e5)*(steps/500)*(10/threads)*(cfg.lifecycle_enabled?1.15:1)*((cfg.n_galaxies||1)>1?1.05:1)}
+export function estimateSeconds(cfg){if(cfg.mode==='planets'){const bodies=cfg.perturber_mass>0?10:9;return .25*cfg.duration/12*(bodies/9)**2}
+  // Revision 6 mirrors server.estimate_seconds: gravity at the starting step + the server-measured SPH/lifecycle cost per step.
+  if(cfg.realistic&&cfg.realistic_info){const i=cfg.realistic_info;return estimateSeconds({...cfg,realistic:false,dt:i.dt_initial,lifecycle_enabled:true})+cfg.duration/i.dt_initial*i.hydro_seconds_per_step}
+  const n=cfg.n,steps=cfg.duration/cfg.dt;const threads=cfg.threads;return REFERENCE_SECONDS*(n/1e5)*Math.log(n)/Math.log(1e5)*(steps/500)*(10/threads)*(cfg.lifecycle_enabled?1.15:1)*((cfg.n_galaxies||1)>1?1.05:1)}
 export function estimateWallHours(cfg){return estimateSeconds(cfg)/3600}
 export function maxDuration(cfg){const per=estimateSeconds({...cfg,duration:1});return per>0?WALL_CAP_HOURS*3600/per:Infinity}
 export function durationCap(cfg){if(cfg.mode==='planets')return 50;const m=maxDuration(cfg);return Math.max(1,Math.min(1200,Math.floor(m)))}
@@ -68,5 +74,11 @@ export function fmtSeconds(s){if(s==null||!isFinite(s))return '—';if(s<90)retu
 export function fmtNum(x,digits=3){return x==null||!isFinite(x)?'—':Number(x).toPrecision(digits)}
 export function percent(x){return x==null||!isFinite(x)?'—':(x*100).toPrecision(3)+'%'}
 export async function api(path,body,method){const init=body!==undefined||method?{method:method||'POST',headers:{'Content-Type':'application/json'},body:body===undefined?undefined:JSON.stringify(body)}:{};const response=await fetch(path,init);const data=await response.json();if(!response.ok)throw Error(data.error||'Request failed');return data}
+// Nodes: the Mac estimator × a node's measured speed factor at the threads it can run. A prediction, not a measurement.
+export const NODE_COLORS=['#b2dfc6','#7eb8ff','#f0a3c2','#e0d07a','#c7a6ff','#9ee0b0'];
+export function nodeColor(nodes,id){const i=Math.max(0,(nodes||[]).findIndex(n=>n.id===id));return NODE_COLORS[i%NODE_COLORS.length]}
+export function nodeThreads(cfg,node){const cores=node?.health?.cores;return cfg.mode==='planets'?1:cores?Math.min(cfg.threads,cores):cfg.threads}
+export function nodeEstimate(cfg,node){if(!node||node.id==='local')return estimateSeconds(cfg);return estimateSeconds({...cfg,threads:nodeThreads(cfg,node)})*(node.speed||1)}
+export function fmtAgo(s){if(s==null||!isFinite(s))return '—';if(s<90)return `${Math.round(s)} s ago`;return fmtSeconds(s)+' ago'}
 export const PHASE_LABEL={complete:'Complete',running:'Computing',paused:'Paused',queued:'Queued',initializing:'Initializing',interrupted:'Checkpoint saved',error:'Error',pausing:'Writing checkpoint'};
 export function phaseLabel(status){if(status.wall_capped&&status.phase==='interrupted')return '120 h cap';if(status.phase==='pausing')return 'Writing checkpoint';if(status.pause_pending&&status.phase==='initializing')return 'Pause queued';if(status.pause_pending&&status.phase==='running')return 'Pausing';return PHASE_LABEL[status.phase]||status.phase}

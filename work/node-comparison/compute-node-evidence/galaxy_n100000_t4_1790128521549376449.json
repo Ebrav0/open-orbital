@@ -1,0 +1,23 @@
+{
+  "timestamp": "2026-09-23T01:55:21+0000",
+  "host": "computenode1",
+  "cpu": "x86_64",
+  "commit": "3e9cd156580edc09abbc02887e7198de29368f67",
+  "model_revision": 4,
+  "rebound_version": "5.1.1",
+  "rebound_library": "/home/edb/open-orbital/work/openmp/librebound.cpython-314-x86_64-linux-gnu.so",
+  "n": 100000,
+  "n_galaxies": 2,
+  "threads_requested": 4,
+  "threads_used": 4,
+  "setup_seconds": 0.8088993699984712,
+  "setup_cpu_seconds": 0.8084388650000001,
+  "cold_step_seconds": 2.2938861140009976,
+  "timed_steps": 4,
+  "timed_seconds": 10.509093951999603,
+  "seconds_per_step": 2.6272734879999007,
+  "cpu_wall_ratio": 3.7132235926556754,
+  "peak_rss_mib": 128.96484375,
+  "finite": true,
+  "simulation_steps": 5
+}

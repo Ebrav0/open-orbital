@@ -1,0 +1,158 @@
+{
+  "model_revision": 5,
+  "solar_50_year_energy_change": 0.0,
+  "perturbed_12_year_energy_change": 2.220446049250313e-16,
+  "earth_period_position_error": 6.21035186624874e-16,
+  "isolated_vs_n_galaxies_1_max_state_difference": 0.0,
+  "rev2_reproduction_max_state_difference": null,
+  "rev3_isolated_max_state_difference": 0.0,
+  "galaxy_2048_t10_lifecycle_off": [
+    {
+      "dt": 0.02,
+      "theta": 0.4,
+      "energy_change": 4.3953335051583053e-05,
+      "disk_radius_change": 0.10758445489045765,
+      "halo_radius_change": 0.018024430156568405,
+      "angular_change": 0.002564420322169082,
+      "finite": true
+    },
+    {
+      "dt": 0.01,
+      "theta": 0.4,
+      "energy_change": 5.694913581155703e-06,
+      "disk_radius_change": 0.10668957112143596,
+      "halo_radius_change": 0.017813892473585557,
+      "angular_change": 0.002524996000819407,
+      "finite": true
+    },
+    {
+      "dt": 0.02,
+      "theta": 0.25,
+      "energy_change": 4.624853528623074e-05,
+      "disk_radius_change": 0.11847283120385921,
+      "halo_radius_change": 0.01740198290710282,
+      "angular_change": 0.0005855259596551755,
+      "finite": true
+    }
+  ],
+  "disk_speed_ratio_mass3_vs_1": 1.194135287108357,
+  "checkpoint_max_state_difference": 0.0,
+  "kroupa_sample": {
+    "min": 0.08000040790212054,
+    "max": 92.32245406552235,
+    "median": 0.2370833954698734,
+    "fraction_above_8": 0.006165
+  },
+  "lifecycle_speed40_2048": {
+    "steps": 500,
+    "wall_seconds": 1.2530707080150023,
+    "mass_drift": 0.0,
+    "baryon_mass_drift": 2.2204460492503126e-16,
+    "counts": {
+      "gas": 0,
+      "protostar": 0,
+      "main_sequence": 549,
+      "giant": 4,
+      "white_dwarf": 58,
+      "neutron_star": 1,
+      "black_hole": 2,
+      "halo": 1434,
+      "smbh": 0
+    },
+    "births": 307,
+    "deaths": 61,
+    "supernovae": 3,
+    "mass_return_failed": 0.05059509415623993,
+    "finite": true
+  },
+  "resume_rng_max_mass_difference": 0.0,
+  "split_particle_counts_5x10000": [
+    2000,
+    2000,
+    2000,
+    2000,
+    2000
+  ],
+  "two_galaxy_head_on": {
+    "n": 2048,
+    "sep0": 19.786735211244302,
+    "sep80": 16.444607844721382,
+    "finite": true,
+    "slices": [
+      1024,
+      1024
+    ]
+  },
+  "five_galaxy_4096": {
+    "slices": [
+      820,
+      819,
+      819,
+      819,
+      819
+    ],
+    "finite": true
+  },
+  "two_galaxy_lifecycle_200": {
+    "mass_drift": 0.0,
+    "disk_mask_sum": 614,
+    "finite": true
+  },
+  "retrograde_Lz": {
+    "A": 2.060504354602809,
+    "B": -4.571290666772282
+  },
+  "r5_disk_vc2": {
+    "radii": [
+      0.1,
+      0.25,
+      0.5,
+      1.0,
+      2.0,
+      4.0
+    ],
+    "thin_over_freeman": [
+      0.9665531198428692,
+      0.9821711756918963,
+      0.9893061232978444,
+      0.9943101937763993,
+      0.9979942079894406,
+      0.999838960207064
+    ],
+    "thick_softened_over_direct_sum": [
+      1.0035006633164718,
+      0.9987212506461832,
+      0.9972770847045944,
+      1.0009143017032975,
+      1.0014018550293542,
+      1.002034064288833
+    ],
+    "freeman_over_direct_sum": [
+      2.2341529126694866,
+      1.6693942269598632,
+      1.3916214821549964,
+      1.2065240486304363,
+      1.0747816227640925,
+      1.01015117496489
+    ]
+  },
+  "r5_compact_disk_half_mass_growth_t3": {
+    "rev4": 1.4974980705970578,
+    "rev5": 0.40264666051231535
+  },
+  "r5_galaxy_2048_t10": {
+    "energy_change": 3.7731133380902726e-05,
+    "disk_radius_change": 0.09975567805247065,
+    "halo_radius_change": 0.021982822066677343
+  },
+  "r5_lifecycle_step_max_relative_momentum_change": {
+    "rev4": 3.12792526196816e-05,
+    "rev5": 2.2682867254269967e-18
+  },
+  "r5_tree_edge": {
+    "unguarded_raises": true,
+    "guarded_root": 4096.8,
+    "vx_after_escaper_unguarded": -0.01129923412587683,
+    "vx_after_escaper_guarded": -0.012746334909848849
+  }
+}

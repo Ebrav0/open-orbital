@@ -1,0 +1,57 @@
+name: lab-worker
+
+# One Open Orbital shard per runner. The 330 minute timeout leaves room
+# inside the hosted runner's 6 hour limit. Checkpoints go to the coordinator's
+# store, never to GitHub artifact storage.
+on:
+  workflow_dispatch:
+    inputs:
+      coordinator_url:
+        description: Lab API base URL on the tailnet
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  worker:
+    runs-on: ubuntu-latest
+    timeout-minutes: 330
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install the integrator
+        run: python -m pip install --disable-pip-version-check 'rebound==5.1.1' numpy
+
+      - name: Install rclone
+        run: sudo apt-get update && sudo apt-get install -y rclone
+
+      - name: Join the tailnet
+        uses: tailscale/github-action@v3
+        with:
+          authkey: ${{ secrets.TS_AUTHKEY }}
+          args: --advertise-tags=tag:lab-worker --hostname=lab-${{ github.run_id }}
+
+      - name: Write the Drive config
+        run: |
+          install -m 600 /dev/null "$RUNNER_TEMP/rclone.conf"
+          printf '%s\n' "$RCLONE_CONFIG" > "$RUNNER_TEMP/rclone.conf"
+        env:
+          RCLONE_CONFIG: ${{ secrets.RCLONE_CONFIG }}
+
+      - name: Claim one shard
+        env:
+          LAB_URL: ${{ inputs.coordinator_url }}
+          LAB_WORKER_TOKEN: ${{ secrets.LAB_WORKER_TOKEN }}
+          LAB_STORAGE: drive
+          LAB_RCLONE_CONFIG: ${{ runner.temp }}/rclone.conf
+        run: python -m lab worker --once --backend github
+
+      - name: Leave the tailnet
+        if: always()
+        run: tailscale logout || true

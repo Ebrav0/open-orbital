@@ -1,0 +1,43 @@
+{
+  "reference_wall": 12.1,
+  "remote_planets": {
+    "wall": 6.2,
+    "frames": 2401,
+    "energy_change": 1.5640011909705306e-15
+  },
+  "mac_to_node": {
+    "wall": 33.3,
+    "segments": [
+      "local",
+      "computenode1"
+    ],
+    "handoff_frame": 57,
+    "frames": 151,
+    "finite": true,
+    "identical_before_handoff": true,
+    "max_pos_diff_first_after": 0.0,
+    "max_pos_diff_final": 0.00942772626876831,
+    "types_identical_final": false,
+    "mass_sum_final": 42.0,
+    "ref_mass_sum_final": 42.0,
+    "transfer_seconds": 2.5
+  },
+  "node_to_mac": {
+    "wall": 26.3,
+    "segments": [
+      "computenode1",
+      "local"
+    ],
+    "handoff_frame": 54,
+    "frames": 151,
+    "finite": true,
+    "identical_before_handoff": false,
+    "max_pos_diff_first_after": 0.0,
+    "max_pos_diff_final": 0.015243619680404663,
+    "types_identical_final": false,
+    "mass_sum_final": 42.0,
+    "ref_mass_sum_final": 42.0,
+    "transfer_seconds": 3.1
+  },
+  "cleanup": "all test runs removed (node copies too)"
+}

@@ -2,11 +2,12 @@
 # Publish frame bytes before status; checkpoint JSON is the commit pointer (rebound binary + baryon npz).
 # Pause stops computation, not viewer playback. Resume may replay uncommitted frames.
 # Lifecycle runs after every leapfrog step when enabled. Wall-time cap is 120 h per resume window.
+# Revision 6 (meta.realistic) steps through realistic.Engine: adaptive global dt, SPH gas, SSP lifecycle.
 # SIGTERM checkpoints: control.json pause stays paused; otherwise interrupted. worker.pid is for adopt-on-restart.
 import json,os,sys,time,math,traceback,signal,shutil
 from pathlib import Path
 import numpy as np
-from physics import galaxy,planets,arrays,diagnostics,set_threads,rebound,GALAXY_DEFAULTS,apply_tree_box,performance_cores
+from physics import galaxy,planets,arrays,diagnostics,set_threads,rebound,GALAXY_DEFAULTS,MODEL_REVISION,REALISTIC_REVISION,apply_tree_box,ensure_tree_box_for_step,performance_cores
 import stellar
 
 WALL_CAP_SECONDS=120*3600
@@ -65,10 +66,12 @@ def run(folder):
                 atomic(folder/'status.json',status)
             here=Path(__file__).parent
             shutil.copy2(here/'physics.py',folder/'model_source.py');shutil.copy2(here/'stellar.py',folder/'stellar_source.py')
-            if config['mode']=='galaxy':s,meta,baryons=galaxy(**{k:v for k,v in config.items() if k in GALAXY_DEFAULTS})
+            if config.get('realistic'):shutil.copy2(here/'realistic.py',folder/'realistic_source.py')
+            if config['mode']=='galaxy':s,meta,baryons=galaxy(**{'revision':REALISTIC_REVISION if config.get('realistic') else MODEL_REVISION,**{k:v for k,v in config.items() if k in GALAXY_DEFAULTS and k!='revision'}})
             else:s,meta,baryons=planets(config.get('jupiter_mass',1),config.get('planet_mass_scale'),config.get('perturber_mass',0),config.get('perturber_a',2.5))
             gix=meta.pop('_galaxy_index',None)
-            if config['mode']=='galaxy':
+            if meta.get('realistic'):times=np.linspace(0,config['duration'],241).tolist()   # the step adapts; frames are evenly spaced
+            elif config['mode']=='galaxy':
                 total_steps=round(config['duration']/s.dt);stride=math.ceil(total_steps/240)
                 times=[min(i*stride,total_steps)*s.dt for i in range(math.ceil(total_steps/stride)+1)]
             else:times=np.linspace(0,config['duration'],2401).tolist()
@@ -80,6 +83,10 @@ def run(folder):
             status.update(frames=1,phase='running',computed_time=0,diagnostics=initial,events=(status.get('events') or [])+['Initial conditions created.'],flags={})
         types_cache=static_types(meta) if baryons is None else None
         params=meta.get('params',{});lifecycle=bool(meta.get('lifecycle_enabled')) and baryons is not None
+        engine=None
+        if meta.get('realistic'):
+            import realistic
+            engine=realistic.Engine(s,meta,baryons,params)
         status.setdefault('flags',{});status.setdefault('events',[]);status['openmp_threads']=used
         def checkpoint():
             filename=f'checkpoint-{index:06d}.bin'
@@ -124,7 +131,18 @@ def run(folder):
             paused_time+=time.monotonic()-p
             if stopping[0]:return True
             status['phase']='running';atomic(folder/'status.json',status);return False
+        def advance_realistic(target):
+            next_check=0.0
+            while target-s.t>1e-9*max(1.,abs(target)):
+                if stopping[0]:return 'stop'
+                now=time.monotonic()
+                if now>=next_check:
+                    if requested_action()=='pause':return 'pause'
+                    next_check=now+.25
+                engine.step(target-s.t,ensure_tree_box_for_step)
+            return 'ok'
         def advance_galaxy(target):
+            if engine is not None:return advance_realistic(target)
             k=round((target-s.t)/s.dt);next_check=0.0
             while k>0:
                 if stopping[0]:return 'stop'
@@ -132,12 +150,10 @@ def run(folder):
                 if now>=next_check:
                     if requested_action()=='pause':return 'pause'
                     next_check=now+.25
-                try:
-                    s.steps(1)
-                except RuntimeError as e:
-                    if 'outside of simulation box' not in str(e).lower():raise
-                    apply_tree_box(s,margin=8.0)
-                    s.steps(1)
+                # A step whose tree misses a particle is already corrupted when REBOUND raises, so prevent it
+                # instead of retrying (the old retry kept the bad step and took an extra one).
+                ensure_tree_box_for_step(s)
+                s.steps(1)
                 if lifecycle:stellar.step(s,baryons,params,s.dt,meta.get('seed',0))
                 k-=1
             return 'ok'
@@ -159,6 +175,7 @@ def run(folder):
                 integration=time.monotonic()-tick;status['chunk_started_at']=None
                 f.write(frame_bytes(s,meta,baryons,types_cache));f.flush();index+=1
                 status.update(phase='running',frames=index+1,progress=index/(len(meta['times'])-1),computed_time=float(s.t),wall_seconds=prior_wall+time.monotonic()-started-paused_time,last_frame_compute_seconds=integration,steps=int(s.steps_done))
+                if engine is not None:status['realistic']=engine.take_stats()
                 if index==len(meta['times'])-1 or (config['mode']=='galaxy' and index%40==0):
                     d=diagnostics(s,meta,baryons);d['energy_change']=abs((d['energy']-initial['energy'])/initial['energy']);d['angular_change']=float(np.linalg.norm(np.array(d['angular_momentum'])-initial['angular_momentum'])/max(np.linalg.norm(initial['angular_momentum']),1e-12));d['energy_change_uncertainty']=float(np.hypot(d.get('energy_sigma',0),initial.get('energy_sigma',0))/abs(initial['energy']));d['disk_radius_change']=d['disk_half_radius']/initial['disk_half_radius']-1
                     enc=d.get('encounter')

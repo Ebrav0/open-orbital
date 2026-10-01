@@ -6,6 +6,9 @@ work/source/
 
 # Live experiments: preserve on disk; back up separately from Git
 work/observatory-data/
+# Run data lives in the iCloud-excluded .nosync folder; the old path is a symlink to it.
+work/observatory-data
+work/observatory-data.nosync/
 
 # Generated logs, browser traces, caches, and local secrets
 work/*.log
@@ -21,3 +24,11 @@ work/cpu-sample*.txt
 
 # Isolated queue browser-test experiments
 work/queue-ui-data/
+work/inspector-ui-data/
+work/inspector-ui-data.log
+
+# Lab coordinator state, secrets, and checkpoint scratch
+work/lab-data/
+
+# Machine-local compute-node registry (hosts, measured speed factors)
+work/nodes.json
