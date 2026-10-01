@@ -8,6 +8,7 @@ This folder is the complete local project. Open this folder in Cursor or another
 2. From any Terminal window, type **`Start OpenOrbital`** (new shells after this setup). That reuses a healthy server on port 8766, or starts one, then opens the Compute dashboard in your default browser. Alternatives: `Start-OpenOrbital`, double-click **Start Open Orbital.command**, or `sh outputs/observatory/run.sh`.
 3. Compute is http://127.0.0.1:8766/lab ; Observe is http://127.0.0.1:8766 . If the server is already running, the command only opens the browser.
 4. Read **outputs/observatory/README.md** for features, physics limitations and test results.
+5. To use the Cube as the control plane and compute node instead, double-click **Open Orbital on Cube.command** (or `sh outputs/observatory/cube-connect.sh`). It tunnels the Cube's loopback-only services to http://127.0.0.1:8966/lab and leaves this Mac's own server on 8766 untouched. See **outputs/observatory/CUBE_COMPUTE_NODE.md**.
 
 The application source is in `outputs/observatory/`. The unusual `outputs/` and `work/` layout was retained to preserve the working runtime, benchmark history, and saved experiments during relocation. Everything is now physically in this Desktop folder. The old Codex directory contains compatibility symlinks only.
 
