@@ -1,3 +1,28 @@
+# Cube compute-node setup — Claude Code, 2026-10-01
+
+Set up the Cube machine (`/workspace/home/repos/open-orbital`, Debian 12 x86_64, 12 AMD EPYC vCPUs, 1 thread/core, 24 GB RAM, persistent `/workspace`) as a Linux/OpenMP compute node on branch `codex/natural-language-research`. Followed `outputs/observatory/LINUX_COMPUTE_NODE.md`. No source, scientific, or benchmark-history file was changed; only this entry.
+
+**Installed (all user-local, no sudo available).** `uv` 0.12.21 in `~/.local/bin`; standalone CPython 3.14.7 via `uv python install 3.14` (system Python 3.11 lacks venv/headers and the pinned numpy/scipy need ≥3.12). Created `work/venv` from it with `outputs/observatory/requirements.txt` plus `outputs/requirements.txt` (benchmark tooling). Built REBOUND 5.1.1 from source into `work/openmp` with `CFLAGS='-O3 -fopenmp -DOPENMP' LDFLAGS='-fopenmp'` using system GCC 12.2 and `libgomp1`; `ldd` shows `libgomp.so.1`. No OpenFOAM or other compute packages are required.
+
+**Node config (gitignored `work/lab-data/`).** `lab.toml` copied from `lab/config.example.toml` with `max_threads = 12`, `max_ram_mib = 16384`, `[storage] backend = "directory"`. Because the galaxy thread schema is `[1,4,8,10,14]`, Lab galaxy shards clamp to 10 threads; the Observatory UI's 14 request is capped to 12 by `effective_threads`. `lab.env` copied from `lab/env.example` (mode 600); `lab serve` generated `LAB_WORKER_TOKEN`. No OpenRouter key, GitHub token, rclone, or Tailscale is configured.
+
+**Exact validation, measured on this node:**
+
+```sh
+work/venv/bin/python -m unittest discover -s lab/tests                     # PASS, 41 tests, 6.7 s
+PYTHONPATH="$PWD/work/openmp" work/venv/bin/python outputs/observatory/tests/validate_threads.py   # PASS: 12/12, binding disabled
+PYTHONPATH="$PWD/work/openmp" OMP_NUM_THREADS=12 OBSERVATORY_TEST_REPORT="$PWD/work/linux-benchmarks/validation_physics_cube.json" work/venv/bin/python outputs/observatory/tests/validate_physics.py
+# PASS: 2048-particle energy 4.3953e-5 (dt=.02) and 5.6949e-6 (dt=.01), matching validation_r4.json; checkpoint, isolated and resume deltas 0; solar 50-yr energy 0.0
+PYTHONPATH="$PWD/work/openmp" OBSERVATORY_TEST_REPORT="$PWD/work/linux-benchmarks/validation_api_cube.json" work/venv/bin/python outputs/observatory/tests/validate_api.py   # PASS, port 8767; planetary energy 2.78e-16
+PYTHONPATH="$PWD/work/openmp" OMP_NUM_THREADS=12 OBSERVATORY_TEST_REPORT="$PWD/work/linux-benchmarks/validation_queue_cube.json" work/venv/bin/python outputs/observatory/tests/validate_queue.py   # PASS, all ten assertions
+```
+
+CPU visibility: `os.cpu_count()`, `sched_getaffinity`, and `multiprocessing.cpu_count()` are 12; a 12-process Pool used 12 distinct PIDs. Lab smoke job `e11ecf422146` (`lab submit`, local backend, galaxy N=30k, 2 galaxies, duration 2, lifecycle off) completed in ~32 s with an OpenMP team of 10, 101 frames, and a hash-verified checkpoint. Its energy diagnostic was 2.19e-2. That is a short large-N Monte Carlo estimate, not a precision conservation check. `benchmark_galaxy.py --n 100000 --steps 4` measured 6.959 / 1.895 / 0.936 / 0.790 s/step at 1 / 4 / 10 / 12 threads (cpu/wall 0.99 / 3.73 / 8.31 / 9.92; RSS 117 MiB). These short-run timings are not full-job ETAs. JSON is under ignored `work/linux-benchmarks/`.
+
+**Live state.** No server, coordinator, or job is running; `lab serve` was started for the smoke job and stopped gracefully. PID 1 is not systemd, so the user services in `outputs/observatory/` do not apply here. Start them manually with `sh outputs/observatory/run.sh` (Observatory, 8766) and `work/venv/bin/python -m lab serve` (Lab, 8770). The Python runtime lives in `~/.local/share/uv`; if it is removed, recreate it before using `work/venv`. External integrations (Luna/Jev, Drive, GitHub workers) remain unverified, as before.
+
+---
+
 # Lab research interface — Codex, 2026-09-23 EDT
 
 Implemented the natural-language Lab workflow in isolated worktree `/home/edb/open-orbital-research`, branch `codex/natural-language-research`. Existing dirty Linux-port, Observatory, benchmark, and Lab prototype files remain unstaged and preserved. The original `/home/edb/open-orbital` checkout was not changed by this worktree.
