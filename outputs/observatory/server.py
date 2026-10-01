@@ -26,7 +26,7 @@ def cpu_label():
 CLONE_AZIMUTH={2:0,3:120,4:240,5:180}
 # id -> (kind, allowed) where kind is 'choice', 'float', 'int', 'bool', 'list8'
 SCHEMA=dict(
-    n=('choice',[10000,30000,100000,200000,500000,1000000]),threads=('choice',[1,4,8,10,14]),seed=('int',(0,2**32-1)),
+    n=('choice',[10000,30000,100000,200000,500000,1000000]),threads=('choice',[1,4,8,10,12,14]),seed=('int',(0,2**32-1)),
     n_galaxies=('choice',[1,2,3,4,5]),
     disk_mass=('float',(.2,5)),halo_mass=('float',(2,80)),disk_fraction=('float',(.15,.45)),disk_scale=('float',(.5,3)),disk_thickness=('float',(.03,.25)),halo_scale=('float',(1.5,10)),warmth=('float',(.4,3)),smbh_mass=('float',(0,.1)),
     lifecycle_enabled=('bool',None),gas_fraction=('float',(0,.8)),t_sf=('float',(.1,20)),lifecycle_speed=('float',(1,80)),sf_density_bias=('float',(0,1)),imf_mmin=('float',(.05,1)),imf_mmax=('float',(20,150)),grow_rate=('float',(0,1)),sn_kick_kms=('float',(0,200)),

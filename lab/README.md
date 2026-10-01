@@ -47,7 +47,7 @@ mkdir -p work/lab-data
 [ -e work/lab-data/lab.env ] || cp lab/env.example work/lab-data/lab.env
 ```
 
-Use the node's existing `work/venv` and native `work/openmp` runtime for local workers. Add `OPENROUTER_API_KEY` to the gitignored `work/lab-data/lab.env`. Set `server.tailscale_host` to the node's Tailscale IP for GitHub workers. Keep the listener on loopback plus that Tailscale address.
+Use the node's existing `work/venv` and native `work/openmp` runtime for local workers. Set `[limits] max_threads` in `work/lab-data/lab.toml` to the node's CPU count. Galaxy shards keep a requested thread count when it is a schema choice (1, 4, 8, 10, 12, 14) at or below that cap; otherwise they use the largest choice at or below it. A 12-CPU node therefore runs 12-thread shards, and a 14-CPU host can still use 14. Add `OPENROUTER_API_KEY` to the gitignored `work/lab-data/lab.env`. Set `server.tailscale_host` to the node's Tailscale IP for GitHub workers. Keep the listener on loopback plus that Tailscale address.
 
 For local-only use, configure `[storage] backend = "directory"`; this stores blobs under `work/lab-data/scratch/objects` for coordinator and local workers on the same node. For the GitHub backend, configure rclone with a private remote named `labdrive` and the folder `Open Orbital Compute`, then use `[storage] backend = "drive"`. The rclone config is `work/lab-data/rclone.conf`; it must never be committed.
 
