@@ -23,6 +23,11 @@ def cpu_label():
             if line.startswith('model name'):
                 return line.split(':',1)[1].strip()
     except OSError:pass
+    if sys.platform=='darwin':
+        try:
+            r=subprocess.run(['sysctl','-n','machdep.cpu.brand_string'],capture_output=True,text=True,timeout=1)
+            if r.returncode==0 and r.stdout.strip():return r.stdout.strip()
+        except (OSError,subprocess.SubprocessError):pass
     return platform.processor() or platform.machine()
 
 CLONE_AZIMUTH={2:0,3:120,4:240,5:180}
