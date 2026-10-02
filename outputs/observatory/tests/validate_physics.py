@@ -1,9 +1,10 @@
-"""Numerical checks for model revision 4. Writes validation_r4.json; never overwrites validation.json or validation_r3.json."""
+"""Numerical checks for model revisions 4 and 5. Writes validation_r5.json; never overwrites validation.json, validation_r3.json or validation_r4.json.
+Revision-4 checks use galaxy()'s default revision=4 (bit-match with revisions 2-3); revision-5 checks pass revision=5."""
 import sys,json,time,tempfile,importlib.util,subprocess
 from pathlib import Path
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
 import numpy as np
-from physics import planets,galaxy,diagnostics,arrays,set_threads,rebound,MODEL_REVISION,split_particle_counts
+from physics import planets,galaxy,diagnostics,arrays,set_threads,rebound,MODEL_REVISION,split_particle_counts,disk_midplane_vc2,ensure_tree_box_for_step
 import stellar
 set_threads(4);results=dict(model_revision=MODEL_REVISION)
 s,m,_=planets();e=s.energy();s.integrate(50);results['solar_50_year_energy_change']=abs(s.energy()/e-1)
@@ -125,4 +126,68 @@ lz_a,lz_b=Lz(s,meta['galaxies'][0]),Lz(s,meta['galaxies'][1])
 results['retrograde_Lz']=dict(A=lz_a,B=lz_b)
 assert lz_a*lz_b<0
 
-out=Path(__import__('os').environ.get('OBSERVATORY_TEST_REPORT',Path(__file__).resolve().parents[1]/'validation_r4.json'));out.write_text(json.dumps(results,indent=2));print(json.dumps(results,indent=2))
+# ---- Revision 5 ----
+# (1) Thick, softened disk rotation curve: thin limit -> Freeman; thick case == direct summation of sampled particles.
+from scipy.special import iv,kv
+Rg=np.array([.1,.25,.5,1,2,4]);Md,Rd=5.,.5;y=Rg/(2*Rd);freeman=2*Md/Rd*y*y*(iv(0,y)*kv(0,y)-iv(1,y)*kv(1,y))
+thin=disk_midplane_vc2(Rg,Md,Rd,.003,.003)/freeman
+rng=np.random.default_rng(5);nds=400000;Rs=rng.gamma(2,Rd,nds);ph=rng.uniform(0,2*np.pi,nds)
+pts=np.column_stack((Rs*np.cos(ph),Rs*np.sin(ph),rng.normal(0,.14,nds)));direct=[]
+for r in Rg:
+    acc=[]
+    for a in np.linspace(0,2*np.pi,16,endpoint=False):
+        x=np.array([r*np.cos(a),r*np.sin(a),0]);d=pts-x;r2=(d*d).sum(1)+.06**2;acc.append(-(Md/nds*d/r2[:,None]**1.5).sum(0)@x)
+    direct.append(np.mean(acc))
+thick=disk_midplane_vc2(Rg,Md,Rd,.14,.06)/np.array(direct)
+results['r5_disk_vc2']=dict(radii=Rg.tolist(),thin_over_freeman=thin.tolist(),thick_softened_over_direct_sum=thick.tolist(),freeman_over_direct_sum=(freeman/np.array(direct)).tolist())
+assert np.all(np.abs(thin[2:]-1)<.012) and np.all(np.abs(thick-1)<.01)
+
+# (2) Compact, disk-dominated galaxy (the 7ffea0bd7149 settings): revision 4 hollows out, revision 5 far less.
+compact=dict(disk_mass=5.,halo_mass=13.,disk_fraction=.18,disk_scale=.5,disk_thickness=.14,halo_scale=6.2,warmth=.4,lifecycle_enabled=False)
+def disk_r50(sim,nd):
+    q,_=arrays(sim);p=q[:nd,:3];c=np.median(p,0)
+    for rad in (2,1,.5):
+        sel=np.linalg.norm(p-c,axis=1)<rad
+        if sel.sum()>50:c=p[sel].mean(0)
+    return float(np.median(np.linalg.norm(p-c,axis=1)))
+compact_growth={}
+for rev in (4,5):
+    s,m,_=galaxy(20000,revision=rev,**compact);r0=disk_r50(s,m['disk_count']);s.steps(150)
+    compact_growth[f'rev{rev}']=disk_r50(s,m['disk_count'])/r0-1
+    assert m['model_revision']==rev
+results['r5_compact_disk_half_mass_growth_t3']=compact_growth
+assert compact_growth['rev5']<.6*compact_growth['rev4']
+
+# (3) Default settings: revision 5 stays as quiet as revision 4 over t=10 (dt .02, theta .4).
+s,m,_=galaxy(2048,lifecycle_enabled=False,revision=5);initial=diagnostics(s,m);s.steps(500);end=diagnostics(s,m)
+results['r5_galaxy_2048_t10']=dict(energy_change=abs(end['energy']/initial['energy']-1),disk_radius_change=end['disk_half_radius']/initial['disk_half_radius']-1,halo_radius_change=end['halo_half_radius']/initial['halo_half_radius']-1)
+assert end['finite'] and abs(results['r5_galaxy_2048_t10']['disk_radius_change'])<.2 and results['r5_galaxy_2048_t10']['energy_change']<.02
+
+# (4) Lifecycle mass transfer conserves momentum in revision 5 (revision 4 did not).
+lc_mom={}
+for rev in (4,5):
+    s,m,b=galaxy(4096,lifecycle_speed=40,gas_fraction=.5,t_sf=.5,revision=rev);P=m['params'];worst=0.
+    for i in range(200):
+        s.steps(1);q,mm=arrays(s);p0=(mm[:,None]*q[:,3:]).sum(0);stellar.step(s,b,P,s.dt,P['seed']);q,mm=arrays(s)
+        worst=max(worst,float(np.linalg.norm((mm[:,None]*q[:,3:]).sum(0)-p0))/float(np.sum(mm*np.linalg.norm(q[:,3:],axis=1))))
+    lc_mom[f'rev{rev}']=worst
+results['r5_lifecycle_step_max_relative_momentum_change']=lc_mom
+assert lc_mom['rev5']<1e-14 and lc_mom['rev4']>1e-9
+
+# (5) Tree root: a particle crossing the edge at the half-step drift is contained before the step (no partial tree).
+def edge_sim():
+    s=rebound.Simulation();s.G=1;s.dt=.02;s.integrator='leapfrog';s.softening=.06;s.root_size=1024
+    for i in range(200):s.add(m=.01,x=np.cos(i),y=np.sin(i),vx=-np.sin(i)*.3,vy=np.cos(i)*.3)
+    s.add(m=.01,x=511.9,vx=20.)
+    for i in range(50):s.add(m=.01,x=-np.cos(i)*2,y=np.sin(i)*2)
+    s.gravity='tree';s.opening_angle2=.16;return s
+s=edge_sim()
+try:
+    s.steps(1);raised=False
+except RuntimeError:raised=True
+partial_vx=s.particles[210].vx
+s=edge_sim();ensure_tree_box_for_step(s);s.steps(1)
+results['r5_tree_edge']=dict(unguarded_raises=raised,guarded_root=float(s.root_size),vx_after_escaper_unguarded=partial_vx,vx_after_escaper_guarded=s.particles[210].vx)
+assert raised and s.root_size>1024 and abs(partial_vx-s.particles[210].vx)>1e-4
+
+out=Path(__import__('os').environ.get('OBSERVATORY_TEST_REPORT',Path(__file__).resolve().parents[1]/'validation_r5.json'));out.write_text(json.dumps(results,indent=2));print(json.dumps(results,indent=2))

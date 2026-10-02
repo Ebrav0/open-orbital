@@ -12,9 +12,9 @@
   "over_budget_error": "Estimated 561 h exceeds the 120-hour compute cap. Maximum span for these settings is about 1069.0 model time units.",
   "n_galaxies_6_error": "n_galaxies must be one of [1, 2, 3, 4, 5]",
   "five_galaxy_10000_ok": true,
-  "summary_bytes_per_job": 5521,
+  "summary_bytes_per_job": 5891,
   "pause_survives_restart": true,
-  "pause_frame": 3,
+  "pause_frame": 4,
   "recovered_frames": 201,
   "recovered_time": 3.9999999999999587,
   "lifecycle": {
@@ -41,7 +41,7 @@
   "running_delete_rejected": true,
   "protected_delete_rejected": true,
   "finished_delete_ok": true,
-  "lab_page_has_no_three": true,
+  "single_page_lazy_three": true,
   "bytes_per_particle": 24,
   "model_revision": 4
 }

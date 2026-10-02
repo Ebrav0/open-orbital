@@ -75,18 +75,62 @@ def new_baryons(rng,n,disk_mask,params):
             types[a+ng:b]=np.where(ages>=.9*tms,GIANT,MS);m_star[a+ng:b]=ms;age[a+ng:b]=ages;birth[a+ng:b]=-ages/MYR_PER_TIME
     return dict(type=types,age=age,m_star=m_star,birth_time=birth,disk_mask=disk_mask.copy(),disk_count=int(np.sum(disk_mask)),debt=0.,born_mass=0.,born_window_myr=0.,supernovae=0,deaths=0,births=0,failed_return=0.)
 
+def kroupa_pdf(m):
+    """Kroupa (2001) IMF dN/dm, continuous at 0.08 and 0.5 Msun, unnormalized."""
+    m=np.asarray(m,dtype=np.float64)
+    return np.where(m<.08,(m/.08)**-.3,np.where(m<.5,(m/.08)**-1.3,(.5/.08)**-1.3*(m/.5)**-2.3))
+
+SSP_AGES=np.concatenate(([0.],np.geomspace(.1,4e4,3000)))   # Myr
+
+def ssp_tables(mmin=.08,mmax=100.):
+    """Model revision 6: a star particle is a simple stellar population (SSP), not one star. Per Msun formed, the
+    mass returned to gas and the number of core-collapse supernovae (m >= 8 Msun) by each age in SSP_AGES, from the
+    same Kroupa IMF, lifetime law and remnant masses the single-star lifecycle uses. Stars whose lifetime hits the
+    20 Gyr clip never die here."""
+    mmin=max(float(mmin),.01);mmax=max(float(mmax),mmin*1.01)
+    m=np.geomspace(mmin,mmax,6000);xi=kroupa_pdf(m);norm=np.trapezoid(m*xi,m)
+    tau=lifetime_myr(m);_,rmass=remnant_of(m);dies=tau<2e4
+    order=np.argsort(tau);t=tau[order]
+    w=(xi*np.gradient(m))[order]/norm
+    ret=np.cumsum(np.where(dies[order],np.maximum(m[order]-rmass[order],0.)*w,0.))
+    sn=np.cumsum(np.where(dies[order]&(m[order]>=8),w,0.))
+    idx=np.searchsorted(t,SSP_AGES,side='right')
+    pad=lambda c:np.concatenate(([0.],c))[idx]
+    return pad(ret),pad(sn)
+
+def new_baryons_ssp(rng,n,disk_mask,params,mass):
+    """Model revision 6 lifecycle arrays. Gas as before; each disk star particle is a population with age drawn from
+    a constant 8 Gyr history. m_star holds its initial mass (code units) so its present mass matches the ICs."""
+    disk_mask=np.asarray(disk_mask,dtype=np.uint8)
+    if disk_mask.shape!=(n,):raise ValueError('disk_mask must have length n')
+    ret,_=ssp_tables(params['imf_mmin'],params['imf_mmax'])
+    types=np.full(n,HALO,np.uint8);m_star=np.zeros(n);age=np.zeros(n);birth=np.zeros(n)
+    for a,b in _disk_slices(disk_mask):
+        nd=b-a;ng=int(round(nd*float(params['gas_fraction'])));types[a:a+ng]=GAS;ns=nd-ng
+        if ns>0:
+            ages=rng.uniform(0,8000,ns);types[a+ng:b]=np.where(ages<10.,PROTO,MS)
+            age[a+ng:b]=ages;birth[a+ng:b]=-ages/MYR_PER_TIME
+            m_star[a+ng:b]=mass[a+ng:b]/(1-np.interp(ages,SSP_AGES,ret))
+    return dict(type=types,age=age,m_star=m_star,birth_time=birth,disk_mask=disk_mask.copy(),disk_count=int(np.sum(disk_mask)),debt=0.,born_mass=0.,born_window_myr=0.,supernovae=0,deaths=0,births=0,failed_return=0.,
+        ssp=True,pending=np.zeros(n),sn_total=0.,p_delivered=0.,p_unused=0.,returned=0.)
+
 def save_baryons(path,b):
     mask=b.get('disk_mask')
     if mask is None:
         mask=np.zeros(len(b['type']),np.uint8);mask[:int(b['disk_count'])]=1
-    np.savez(path,type=b['type'],age=b['age'],m_star=b['m_star'],birth_time=b['birth_time'],disk_mask=np.asarray(mask,dtype=np.uint8),scalars=np.array([b['disk_count'],b['debt'],b['born_mass'],b['born_window_myr'],b['supernovae'],b['deaths'],b['births'],b['failed_return']],dtype=np.float64))
+    extra={}
+    if b.get('ssp'):extra=dict(pending=b['pending'],ssp=np.array([b['sn_total'],b['p_delivered'],b['p_unused'],b['returned']],dtype=np.float64))
+    np.savez(path,type=b['type'],age=b['age'],m_star=b['m_star'],birth_time=b['birth_time'],disk_mask=np.asarray(mask,dtype=np.uint8),scalars=np.array([b['disk_count'],b['debt'],b['born_mass'],b['born_window_myr'],b['supernovae'],b['deaths'],b['births'],b['failed_return']],dtype=np.float64),**extra)
 
 def load_baryons(path):
     z=np.load(path);s=z['scalars'];n=len(z['type']);disk_count=int(s[0])
     if 'disk_mask' in z.files:mask=z['disk_mask'].astype(np.uint8)
     else:
         mask=np.zeros(n,np.uint8);mask[:disk_count]=1
-    return dict(type=z['type'].astype(np.uint8),age=z['age'],m_star=z['m_star'],birth_time=z['birth_time'],disk_mask=mask,disk_count=disk_count,debt=float(s[1]),born_mass=float(s[2]),born_window_myr=float(s[3]),supernovae=int(s[4]),deaths=int(s[5]),births=int(s[6]),failed_return=float(s[7]))
+    out=dict(type=z['type'].astype(np.uint8),age=z['age'],m_star=z['m_star'],birth_time=z['birth_time'],disk_mask=mask,disk_count=disk_count,debt=float(s[1]),born_mass=float(s[2]),born_window_myr=float(s[3]),supernovae=int(s[4]),deaths=int(s[5]),births=int(s[6]),failed_return=float(s[7]))
+    if 'ssp' in z.files:
+        e=z['ssp'];out.update(ssp=True,pending=z['pending'],sn_total=float(e[0]),p_delivered=float(e[1]),p_unused=float(e[2]),returned=float(e[3]))
+    return out
 
 def _cells(pos):
     """Integer cell key per row; keys are sortable int64 from a shifted 3D grid."""
@@ -113,7 +157,10 @@ def step(sim,b,params,dt_model,seed):
     types=b['type'];age=b['age'];m_star=b['m_star']
     rng=np.random.default_rng([int(seed)&0xffffffff,int(sim.steps_done)&0xffffffff])
     n=sim.N;q=np.empty((n,6));m=np.empty(n);sim.serialize_particle_data(xyzvxvyvz=q,m=m)
-    pos=q[:,:3];dm=np.zeros(n);dv=None;changed=False
+    pos=q[:,:3];vel=q[:,3:].copy();dm=np.zeros(n);dv=None;changed=False
+    # Revision 5: moved mass carries its momentum (a perfectly inelastic merge for the receiver). Revision 4 moved
+    # mass at the receiver's velocity, which does not conserve momentum; kept only so older runs resume unchanged.
+    carry=int(params.get('revision',4))>=5;dp=np.zeros((n,3)) if carry else None
     gas_idx=np.flatnonzero(types==GAS)
     gas_keys=None;gas_order=None
     if len(gas_idx):
@@ -133,6 +180,8 @@ def step(sim,b,params,dt_model,seed):
             src=gas_idx[nb];avail=m[src]+dm[src];want=min(float(avail.sum())*.5,m[gi]*rate)
             if want<=0:continue
             take=avail/avail.sum()*want;dm[src]-=take;dm[gi]+=want;changed=True
+            if carry:
+                mv=take[:,None]*vel[src];dp[src]-=mv;dp[gi]+=mv.sum(0)
     done=grow[age[grow]>=prems_myr(m_star[grow])] if len(grow) else grow
     types[done]=MS
     # MS -> giant
@@ -150,6 +199,7 @@ def step(sim,b,params,dt_model,seed):
                 nb=_neighbour_gas(dkeys[j],gas_keys,gas_order) if len(gas_idx) else np.empty(0,np.int64)
                 if len(nb):
                     src=gas_idx[nb];dm[src]+=e/len(src);dm[di]-=e
+                    if carry:dp[src]+=e/len(src)*vel[di];dp[di]-=e*vel[di]
                 else:b['failed_return']+=float(e)
             if rtype[j] in (NS,BH) and kick_kms>0:kicks.append(di)
         types[dying]=rtype;b['deaths']+=len(dying);b['supernovae']+=int(np.sum(m_star[dying]>=8));changed=True
@@ -175,6 +225,11 @@ def step(sim,b,params,dt_model,seed):
     b['born_window_myr']+=dt_myr
     # ---- write back ----
     if changed and np.any(dm):
+        if carry:
+            new=m+dm;ok=(new>0)&np.any(dp!=0,axis=1)
+            if np.any(ok):
+                # A donor keeps its velocity: (m v - t v)/(m - t) = v. Kicks (already in q) are added on top.
+                q[ok,3:]+=(m[ok,None]*vel[ok]+dp[ok])/new[ok,None]-vel[ok];dv=True
         m+=dm;m[:]=np.maximum(m,0.)
         sim.set_serialized_particle_data(m=m)
     if dv:sim.set_serialized_particle_data(xyzvxvyvz=q)
@@ -193,5 +248,8 @@ def summary(sim,b,m=None):
     out=dict(gas_mass=float(np.sum(m[t==GAS])),stellar_mass=float(np.sum(m[alive])),remnant_mass=float(np.sum(m[(t>=WD)&(t<=BH)])),counts=counts,
       sfr=float(b['born_mass']/b['born_window_myr']) if b['born_window_myr']>0 else 0.,mean_stellar_age=float(np.mean(b['age'][alive])) if np.any(alive) else 0.,
       supernovae_cumulative=int(b['supernovae']),deaths_cumulative=int(b['deaths']),births_cumulative=int(b['births']),mass_return_failed=float(b['failed_return']),baryon_mass=float(np.sum(m[mask])))
+    if b.get('ssp'):
+        out.update(ssp=True,supernovae_cumulative=int(round(b['sn_total'])),returned_mass=float(b['returned']),return_pending=float(np.sum(b['pending'])),
+            feedback_momentum=float(b['p_delivered']),feedback_momentum_unused=float(b['p_unused']))
     b['born_mass']=0.;b['born_window_myr']=0.
     return out

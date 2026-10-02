@@ -1,21 +1,155 @@
-<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Orbital — Local Observatory</title><link rel="icon" href="data:,"><link rel="stylesheet" href="/style.css"><script type="importmap">{"imports":{"three":"/vendor/three.module.js"}}</script></head><body>
-<header class="topbar"><a class="brand" href="/" aria-label="Orbital home"><span class="brand-mark">◎</span><span>ORBITAL<small>LOCAL OBSERVATORY</small></span></a><nav class="page-tabs" aria-label="Page"><a href="/" class="active" aria-current="page">Observe</a><a href="/lab">Compute</a></nav><div class="topbar-end"><nav class="mode-tabs" aria-label="Simulation mode"><button id="galaxy-tab" class="active">Galaxy</button><button id="planets-tab">Planetary system</button></nav><div class="machine"><i></i><span>CPU <b>N-BODY ENGINE</b></span></div></div></header>
-<div class="workspace"><aside class="sidebar"><div class="section-label">EXPERIMENT SETUP</div><h2 id="setup-title">An island of stars.</h2><p id="setup-desc">Explore a stellar disk inside a living dark-matter halo.</p>
-<div class="field galaxy-only"><label for="particle-count">Gravitating particles</label><select id="particle-count"><option value="10000">10,000 · quick study</option><option value="30000">30,000 · balanced</option><option value="100000" selected>100,000 · detailed</option><option value="200000">200,000 · heavy</option><option value="500000">500,000 · very heavy</option><option value="1000000">1,000,000 · maximum</option></select></div>
-<div class="field galaxy-only"><label for="threads">CPU threads</label><select id="threads"><option value="1">1 · light load</option><option value="4">4 · background</option><option value="8" selected>8 · balanced</option><option value="10">10 requested</option><option value="14">14 requested</option></select></div>
-<div class="field planets-only hidden"><label for="jupiter-mass">Jupiter mass</label><select id="jupiter-mass"><option value="1">1× · original system</option><option value="3">3× · heavier Jupiter</option><option value="10">10× · extreme experiment</option></select></div>
-<div class="field"><label for="duration">Simulation span</label><select id="duration"><option value="10">245 million years</option><option value="20">490 million years</option></select></div>
-<button id="compute" class="primary">＋ Compute new experiment</button><p class="micro">Uses default structure and lifecycle settings. Saved runs stay available. Computation continues when you leave this tab.</p><a class="lab-link" href="/lab">Edit all parameters on Compute →</a>
-<div class="separator"></div><div class="section-label">SAVED EXPERIMENTS <span id="run-count">0</span></div><div id="run-list" class="run-list"></div>
-<div class="sidebar-footer"><span class="tiny-orbit">◌</span><div>Computed on host<small>CPU physics. Host data.</small></div></div></aside>
-<main><div class="view-heading"><div><div class="eyebrow" id="eyebrow">EXPERIMENT / GALACTIC DYNAMICS</div><h1 id="view-title">A galaxy, in motion.</h1></div><span class="status-pill" id="phase">Loading</span></div>
-<div class="viewport" id="viewport"><canvas id="space" aria-label="Interactive three-dimensional gravity simulation"></canvas><div class="view-stats"><div><span id="body-count">—</span><small id="body-label">GRAVITATING PARTICLES</small></div><div><span id="time-value">0</span><small id="time-label">MILLION YEARS</small></div><div><span id="frame-value">—</span><small>SAVED FRAMES</small></div></div>
-<div id="empty" class="empty"><div class="empty-orbit">◎</div><h2>Preparing your universe</h2><p>Loading saved simulation frames…</p></div><div id="planet-labels"></div><div class="view-toolbar"><button id="reset-view" title="Reset camera">↺ Reset view</button><button id="top-view">Top</button><button id="side-view">Side</button><button id="inner-view" class="planets-only hidden">Inner planets</button></div>
-<div class="view-caption"><span class="crosshair">＋</span><span id="view-caption">STELLAR DISK / LIVE DARK-MATTER HALO</span></div><div class="gesture-hint">Drag to orbit · scroll to zoom</div></div>
-<div class="transport"><button id="play" class="play-button" aria-label="Pause playback">Ⅱ</button><div class="timeline-wrap"><div class="timeline-label"><span id="playback-label">PLAYBACK</span><span id="time-range">Loading frames</span></div><input id="timeline" aria-label="Simulation timeline" type="range" min="0" max="1" step="0.01" value="0"></div><select id="speed" aria-label="Playback speed"><option value="0.25">0.25×</option><option value="1" selected>1× speed</option><option value="4">4× speed</option></select></div>
-<div class="bottom-strip"><span id="render-state">Waiting for data</span><span>PHYSICS + SAVED-STATE PLAYBACK</span></div></main>
-<aside class="inspector"><div class="section-label">COMPUTATION</div><h3 id="job-title">Isolated disk + live halo</h3><div class="progress-track"><div id="progress-bar"></div></div><div class="progress-copy"><span id="progress-label">Waiting</span><span id="wall-time">—</span></div><button id="pause-compute" class="secondary" disabled>Pause computation</button>
-<div class="separator"></div><div class="section-label">VIEW LAYERS</div><label class="switch-row galaxy-only"><span><i class="dot stellar"></i>Stellar disk</span><input id="show-disk" type="checkbox" checked></label><label class="switch-row galaxy-only"><span><i class="dot halo"></i>Dark-matter halo</span><input id="show-halo" type="checkbox"></label><label class="switch-row planets-only hidden"><span>Orbital guides</span><input id="show-orbits" type="checkbox" checked></label><label class="switch-row planets-only hidden"><span>Planet labels</span><input id="show-labels" type="checkbox" checked></label><div class="field galaxy-only"><label for="color-mode">Color particles by</label><select id="color-mode"><option value="component">Component / stellar stage</option><option value="speed">Speed</option><option value="galaxy">Galaxy</option></select></div><div id="stage-legend" class="stage-legend galaxy-only hidden"><span style="--c:#5c94b8">Gas</span><span style="--c:#ff7338">Protostar</span><span style="--c:#ffd9a1">Main sequence</span><span style="--c:#ff8c40">Giant</span><span style="--c:#cce6ff">White dwarf</span><span style="--c:#b899ff">Neutron star</span><span style="--c:#f24dcc">Black hole</span><span style="--c:#4f70b3">Halo</span></div><div id="galaxy-legend" class="stage-legend galaxy-only hidden"><span style="--c:#e3cbaa">Galaxy 1</span><span style="--c:#7eb8ff">Galaxy 2</span><span style="--c:#f0a3c2">Galaxy 3</span><span style="--c:#9ee0b0">Galaxy 4</span><span style="--c:#e0d07a">Galaxy 5</span></div>
-<div class="separator"></div><div class="section-label">LATEST COMPUTED STATE</div><dl class="diagnostics"><div><dt id="energy-label">Energy estimate change</dt><dd id="energy">—</dd></div><div><dt>Angular momentum change</dt><dd id="angular">—</dd></div><div class="galaxy-only"><dt>Disk half-radius change</dt><dd id="radius-change">—</dd></div><div><dt>Numerical method</dt><dd id="method">—</dd></div></dl>
-<details class="model-note" open><summary>About this model</summary><p id="model-description"></p><a id="source-link" href="https://rebound.hanno-rein.de/" target="_blank" rel="noreferrer">Model reference ↗</a></details><div class="event"><i></i><p id="event-text">Waiting for an experiment.</p></div></aside></div>
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Orbital Observatory</title><link rel="icon" href="data:,"><link rel="stylesheet" href="/style.css"><script type="importmap">{"imports":{"three":"/vendor/three.module.js"}}</script></head><body>
+<header class="topbar">
+  <a class="brand" href="/" aria-label="Orbital home"><span class="brand-mark">◎</span><span>ORBITAL<small>GRAVITATIONAL OBSERVATORY</small></span></a>
+  <nav class="mode-tabs" aria-label="Simulation mode"><button id="galaxy-tab" class="active">Galaxy</button><button id="planets-tab">Planetary system</button></nav>
+  <div class="node-strip" id="node-strip" aria-label="Compute nodes"></div>
+</header>
+<div class="shell">
+  <aside class="library" aria-label="Experiments">
+    <button id="new-run" class="primary new-run">＋ New experiment</button>
+    <div class="section-label lib-head">EXPERIMENTS <span id="run-count">0</span></div>
+    <div id="run-list" class="run-list"></div>
+    <details class="queue-panel" id="queue-panel"><summary><span class="section-label">QUEUE</span><span id="queue-badge" class="badge">0</span></summary>
+      <p id="queue-message" class="micro" aria-live="polite"></p>
+      <div class="row-actions"><button id="start-queue" class="secondary small">Start queue</button><button id="hold-queue" class="secondary small">Hold queue</button></div>
+      <ol id="queue-list"></ol>
+      <p class="micro">Queued runs execute in order, each on the node it was queued for. Pausing the current queue run holds the queue.</p>
+    </details>
+  </aside>
+
+  <main class="stage">
+    <div class="viewport" id="viewport">
+      <canvas id="space" aria-label="Interactive three-dimensional gravity simulation"></canvas>
+      <div id="planet-labels"></div>
+      <div class="hud-top">
+        <div><div class="eyebrow" id="eyebrow">EXPERIMENT / GALACTIC DYNAMICS</div><h1 id="view-title">A galaxy, in motion.</h1></div>
+        <div class="hud-pills"><span class="node-badge hidden" id="stage-node"></span><span class="status-pill" id="stage-phase">Loading</span></div>
+      </div>
+      <div class="hud-stats"><div><span id="body-count">—</span><small id="body-label">GRAVITATING PARTICLES</small></div><div><span id="time-value">0</span><small id="time-label">MILLION YEARS</small></div><div><span id="frame-value">—</span><small>SAVED FRAMES</small></div></div>
+      <div id="empty" class="empty"><div class="empty-orbit">◎</div><h2>Preparing your universe</h2><p>Loading saved simulation frames…</p></div>
+      <div class="view-caption"><span class="crosshair">＋</span><span id="view-caption">STELLAR DISK / LIVE DARK-MATTER HALO</span></div>
+      <div class="view-toolbar">
+        <button id="reset-view" title="Reset camera">↺</button><button id="top-view">Top</button><button id="side-view">Side</button><button id="inner-view" class="planets-only hidden">Inner</button>
+        <details class="layers" id="layers"><summary>Layers</summary><div class="layers-pop">
+          <label class="switch-row galaxy-only"><span><i class="dot stellar"></i>Stellar disk</span><input id="show-disk" type="checkbox" checked></label>
+          <label class="switch-row galaxy-only"><span><i class="dot halo"></i>Dark-matter halo</span><input id="show-halo" type="checkbox"></label>
+          <label class="switch-row planets-only hidden"><span>Orbital guides</span><input id="show-orbits" type="checkbox" checked></label>
+          <label class="switch-row planets-only hidden"><span>Planet labels</span><input id="show-labels" type="checkbox" checked></label>
+          <div class="field galaxy-only"><label for="color-mode">Color particles by</label><select id="color-mode"><option value="component">Component / stellar stage</option><option value="speed">Speed</option><option value="galaxy">Galaxy</option></select></div>
+          <label class="switch-row galaxy-only" title="Above 250,000 particles the stage draws every k-th particle (plus central black holes) with larger points, so playback stays smooth. The saved data and the physics are unaffected."><span>Full detail (every particle; slow at 1M)</span><input id="full-detail" type="checkbox"></label>
+          <label class="switch-row"><span>3D rendering</span><input id="render-on" type="checkbox" checked></label>
+        </div></details>
+      </div>
+      <div id="stage-legend" class="stage-legend hidden"><span style="--c:#5c94b8">Gas</span><span style="--c:#ff7338">Protostar</span><span style="--c:#ffd9a1">Main sequence</span><span style="--c:#ff8c40">Giant</span><span style="--c:#cce6ff">White dwarf</span><span style="--c:#b899ff">Neutron star</span><span style="--c:#f24dcc">Black hole</span><span style="--c:#4f70b3">Halo</span></div>
+      <section id="inspector" class="inspector hidden" aria-labelledby="insp-title">
+        <header class="insp-head"><div><div class="eyebrow" id="insp-kind">SELECTED</div><h3 id="insp-title">—</h3></div><button id="insp-close" class="insp-close" aria-label="Clear selection" title="Clear selection (Esc)">✕</button></header>
+        <div class="insp-tools"><label class="inline"><input id="insp-follow" type="checkbox"> Follow with camera</label><button id="insp-focus" class="secondary small">Centre view</button></div>
+        <p class="insp-when" id="insp-when"></p>
+        <dl class="insp-now" id="insp-now"></dl>
+        <div id="insp-hist">
+          <div class="section-label insp-label">TRACK · SAVED FRAMES <span id="insp-count"></span></div>
+          <figure><figcaption><span id="insp-r-label">Distance from galaxy centre</span><span id="insp-r-range"></span></figcaption><svg id="insp-chart-r" class="sparkline" viewBox="0 0 320 64" role="img" aria-label="Distance from centre over saved frames"></svg></figure>
+          <figure><figcaption><span>Speed</span><span id="insp-v-range"></span></figcaption><svg id="insp-chart-v" class="sparkline" viewBox="0 0 320 64" role="img" aria-label="Speed over saved frames"></svg></figure>
+          <dl class="insp-summary" id="insp-summary"></dl>
+          <ul class="insp-events" id="insp-events"></ul>
+        </div>
+        <p class="micro" id="insp-note"></p>
+      </section>
+      <div id="galaxy-legend" class="stage-legend hidden"><span style="--c:#e3cbaa">Galaxy 1</span><span style="--c:#7eb8ff">Galaxy 2</span><span style="--c:#f0a3c2">Galaxy 3</span><span style="--c:#9ee0b0">Galaxy 4</span><span style="--c:#e0d07a">Galaxy 5</span></div>
+    </div>
+    <div class="transport">
+      <button id="play" class="play-button" aria-label="Pause playback">Ⅱ</button>
+      <div class="timeline-wrap">
+        <div class="timeline-label"><span id="playback-label">PLAYBACK</span><span id="time-range">—</span></div>
+        <input id="timeline" aria-label="Simulation timeline" type="range" min="0" max="1" step="0.01" value="0">
+        <div class="segments" id="segments" aria-label="Which node computed each part of the run"></div>
+      </div>
+      <select id="speed" aria-label="Playback speed"><option value="0.25">0.25×</option><option value="1" selected>1×</option><option value="4">4×</option></select>
+    </div>
+    <div class="bottom-strip"><span id="render-state">Waiting for data</span><span id="pick-hint">Click a star or planet to inspect it</span><span>COMPUTED SIMULATION TIME ≠ PLAYBACK SPEED ≠ FRAME RATE</span></div>
+  </main>
+
+  <aside class="panel" aria-label="Context">
+    <nav class="panel-tabs" role="tablist"><button role="tab" id="tab-run" aria-selected="true">Run</button><button role="tab" id="tab-new" aria-selected="false">New</button><button role="tab" id="tab-physics" aria-selected="false">Physics</button><button role="tab" id="tab-nodes" aria-selected="false">Nodes</button></nav>
+
+    <section id="view-run" class="panel-view" aria-labelledby="status-heading">
+      <div class="status-head"><span class="status-pill" id="phase">Idle</span><h2 id="status-heading">Nothing selected</h2><p id="status-sub" class="lead">Pick an experiment on the left or start a new one.</p></div>
+      <div class="progress-track"><div id="progress-bar"></div></div><div class="progress-copy"><span id="progress-label">—</span><span id="frame-label">—</span></div>
+      <div class="estimate" id="run-eta"><div class="estimate-time" id="eta-big">—</div><div class="estimate-kind" id="eta-kind"></div></div>
+      <div class="compute-actions"><button id="stop-compute" class="secondary">Stop computation</button><button id="remove-run" class="secondary">Remove</button></div>
+      <p class="pause-eta hidden" id="pause-eta" aria-live="polite"></p>
+      <div class="card where" id="where"><div class="section-label">WHERE IT COMPUTES</div><div id="where-body"></div>
+        <div class="handoff"><label for="move-target">Hand off to</label><select id="move-target"></select><button id="move-run" class="secondary small">Hand off</button></div>
+        <div class="handoff standby-row" id="standby-row"><label for="run-standby">If this Mac sleeps</label><select id="run-standby"></select><label class="inline"><input id="run-return" type="checkbox" checked> hand back</label></div>
+        <p class="micro">A hand-off pauses at the next leapfrog check, writes a checkpoint, moves only the checkpoint and small files, then resumes on the other node. Frames already computed stay here on the Mac.</p></div>
+      <div class="card twin hidden" id="twin-card"><div class="section-label">TWIN · REPRODUCIBILITY <button id="open-twin" class="secondary small">Open twin</button></div>
+        <p class="micro" id="twin-summary"></p>
+        <svg id="chart-twin" class="sparkline tall" viewBox="0 0 320 90" role="img" aria-label="Particle divergence between twins over time"></svg>
+        <div class="twin-legend"><span style="--c:#b2dfc6">median separation</span><span style="--c:#e0b07a">90th percentile</span></div>
+        <dl class="diagnostics" id="twin-table"></dl></div>
+      <dl class="health-strip" id="health-strip" aria-live="polite">
+        <div><dt>Daemon</dt><dd id="health-daemon">—</dd></div><div><dt>Sleep prevention</dt><dd id="health-sleep">—</dd></div>
+        <div><dt>Worker</dt><dd id="health-worker">—</dd></div><div><dt>Last checkpoint</dt><dd id="health-checkpoint">—</dd></div>
+        <div><dt>120 h window left</dt><dd id="health-cap">—</dd></div><div><dt>Lid close</dt><dd id="health-lid">sleeps the Mac; nodes keep going</dd></div>
+      </dl>
+      <dl class="status-grid card"><div><dt>Wall time</dt><dd id="wall-time">—</dd></div><div><dt>Computed simulation time</dt><dd id="computed-time">—</dd></div><div><dt>Last chunk</dt><dd id="last-chunk">—</dd></div><div><dt>Threads</dt><dd id="threads-val">—</dd></div><div><dt>Particles</dt><dd id="particles-val">—</dd></div><div><dt>Leapfrog steps</dt><dd id="steps-val">—</dd></div><div><dt>Model revision</dt><dd id="revision-val">—</dd></div><div><dt>Experiment id</dt><dd id="job-id" class="mono">—</dd></div></dl>
+      <div class="card speed-card hidden" id="speed-card" aria-live="polite"><div class="section-label">COMPUTE SPEED · LIVE</div>
+        <div class="estimate-time" id="speed-big">—</div><div class="estimate-kind" id="speed-kind"></div>
+        <dl class="status-grid"><div><dt>Recent (last few frames)</dt><dd id="speed-recent">—</dd></div><div><dt>Average this run</dt><dd id="speed-avg">—</dd></div><div><dt>Integrator steps / s</dt><dd id="speed-steps">—</dd></div><div><dt>Particle-steps / s</dt><dd id="speed-ps">—</dd></div></dl>
+        <p class="micro">Computed simulation time per second of wall time. This is compute speed, not playback speed or frame rate. Measured from saved frames, so it updates once per frame.</p></div>
+      <details class="card" open><summary class="section-label">HISTORY · SAVED DIAGNOSTICS</summary>
+        <div class="history-charts"><figure><figcaption>Disk half-radius</figcaption><svg id="chart-radius" class="sparkline" viewBox="0 0 320 64" role="img" aria-label="Disk half-radius history"></svg></figure><figure><figcaption>SFR / births</figcaption><svg id="chart-sfr" class="sparkline" viewBox="0 0 320 64" role="img" aria-label="Star-formation history"></svg></figure><figure><figcaption>Energy change</figcaption><svg id="chart-energy" class="sparkline" viewBox="0 0 320 64" role="img" aria-label="Energy-change history"></svg></figure></div>
+        <p class="micro">Energy with the lifecycle on is not an error bound; large-N energy is sampled.</p></details>
+      <details class="card" open><summary class="section-label">DIAGNOSTICS</summary><dl class="diagnostics" id="diagnostics"></dl></details>
+      <details class="card"><summary class="section-label">EVENT LOG</summary><ul class="event-log" id="event-log"></ul><button id="show-log" class="secondary small">Show worker log</button><pre id="worker-log" class="worker-log hidden"></pre></details>
+      <details class="card model-note"><summary class="section-label">ABOUT THIS MODEL</summary><p id="model-description"></p><a id="source-link" href="https://rebound.hanno-rein.de/" target="_blank" rel="noreferrer">Model reference ↗</a></details>
+    </section>
+
+    <section id="view-new" class="panel-view hidden" aria-labelledby="new-heading">
+      <div class="status-head"><div class="section-label">NEW EXPERIMENT <span id="slider-count"></span></div><h2 id="new-heading">Every knob, one page.</h2><p class="lead" id="setup-desc">The stage previews the initial conditions as you drag. <b>Start</b> always creates a new experiment; sliders never retune a running integrator.</p></div>
+      <div class="card placement"><div class="section-label">WHERE TO COMPUTE</div>
+        <div class="node-picker" id="node-picker" role="radiogroup" aria-label="Compute node"></div>
+        <label class="switch-row"><span>Split across machines (hand off in sequence)</span><input id="split-on" type="checkbox"></label>
+        <div id="legs" class="legs hidden"></div>
+        <div class="split-bar" id="split-bar"></div>
+        <div class="field" id="standby-field"><label for="standby-node">If this Mac sleeps or closes, continue on</label><select id="standby-node"></select>
+          <label class="switch-row"><span>Hand back to this Mac when it wakes</span><input id="return-on-wake" type="checkbox" checked></label>
+          <p class="micro">The Mac copies its latest checkpoint to that machine every few minutes and sends a heartbeat. If the heartbeat stops for 90 s, the machine resumes from the copy; work since the copy is recomputed.</p></div>
+        <div class="field"><label for="twin-node">Twin run on another machine (reproducibility check)</label><select id="twin-node"></select>
+          <p class="micro">Computes the identical experiment on two machines at once and charts how far they drift apart. Different CPUs round differently and N-body systems are chaotic, so this shows which results are robust.</p></div>
+      </div>
+      <div class="estimate" id="estimate" aria-live="polite"><div class="estimate-time" id="estimate-time">Estimating…</div><div class="estimate-kind" id="estimate-kind">estimate before start</div><div class="estimate-detail" id="estimate-detail"></div></div>
+      <div class="compute-actions"><button id="start-compute" class="primary">Start computation</button><button id="add-queue" class="secondary">Add to queue</button></div>
+      <div class="row-actions"><button id="reset-defaults" class="secondary small" title="Restore every slider in the current mode (Galaxy or Planetary) to its default">Reset settings to defaults</button></div>
+      <p id="realistic-banner" class="realistic-banner hidden"><b>Real World Physics is on.</b> Timestep, softening and star formation are set by the physics model, so those sliders are locked. <button id="open-physics" class="secondary small">Physics tab</button></p>
+      <div id="sliders" class="slider-groups"></div>
+      <div class="field notes-field"><label for="notes">Run notes (provenance)</label><textarea id="notes" rows="2" maxlength="2000" placeholder="Who changed what, and why."></textarea></div>
+      <details class="card model-note"><summary class="section-label">HONEST LIMITS</summary><p>1,000,000 dots are still superparticles, not a resolved Milky Way. Gas is collisionless bookkeeping, not SPH. Lifetimes are a mass–age clock, not stellar-evolution tracks; lifecycle speed ≠ 1 is never calibrated. The default galaxy is an exploratory warm disk in a live halo, not a calibrated equilibrium model, and a short run does not prove long-term stability. Encounters are collisionless. Barnes–Hut with several dense concentrations is coarser than an isolated galaxy. Wall-time estimates scale from one measured 100,000-particle, 10-thread point; node estimates multiply that by one measured speed factor per node. θ and softening are not in the timing model. The worker stops at 120 h of wall time per resume window. Closing the lid sleeps the Mac; runs on an always-on node continue and sync when the Mac wakes.</p></details>
+    </section>
+
+    <section id="view-physics" class="panel-view hidden" aria-labelledby="physics-heading">
+      <div class="status-head"><div class="section-label">PHYSICS</div><h2 id="physics-heading">How new galaxy runs are computed.</h2><p class="lead">Applies when you start a galaxy run. Saved runs keep the physics they were computed with.</p></div>
+      <label class="card switch-row physics-switch"><span><b>Real World Physics</b><small id="realistic-state">Off: the standard collisionless model (revision 5).</small></span><input id="realistic-on" type="checkbox"></label>
+      <div id="physics-body"></div>
+    </section>
+
+    <section id="view-nodes" class="panel-view hidden" aria-labelledby="nodes-heading">
+      <div class="status-head"><div class="section-label">COMPUTE NODES</div><h2 id="nodes-heading">Where the physics runs.</h2><p class="lead">This Mac is the hub: it keeps every frame and the library. Nodes are reached over SSH with this Mac's key (Tailscale addresses work). If a node rejects the key, enter its password once on its card: it installs this Mac's key and is never stored.</p></div>
+      <div id="node-cards" class="node-cards"></div>
+      <details class="card" id="node-form-card"><summary class="section-label" id="node-form-title">ADD A NODE</summary>
+        <form id="node-form" class="node-form" autocomplete="off">
+          <div class="field"><label for="nf-id">Id</label><input id="nf-id" required pattern="[a-z0-9][a-z0-9-]{0,31}" placeholder="oracle-a1"></div>
+          <div class="field"><label for="nf-label">Label</label><input id="nf-label" placeholder="Oracle A1 (always on)"></div>
+          <div class="field"><label for="nf-host">SSH target</label><input id="nf-host" required placeholder="ubuntu@oracle-a1"></div>
+          <div class="field"><label for="nf-root">Remote root</label><input id="nf-root" value="~/open-orbital"></div>
+          <div class="field"><label for="nf-python">Python (relative to root, or absolute)</label><input id="nf-python" value="work/venv/bin/python"></div>
+          <div class="field"><label for="nf-pythonpath">Native REBOUND (PYTHONPATH)</label><input id="nf-pythonpath" value="work/openmp"></div>
+          <label class="switch-row"><span>Always on</span><input id="nf-always" type="checkbox" checked></label>
+          <div class="row-actions"><button class="primary small" type="submit">Save node</button><button class="secondary small" type="button" id="nf-cancel">Clear</button></div>
+        </form>
+        <p class="micro">New node? Run <code>outputs/observatory/node/bootstrap.sh</code> on it once (Ubuntu, x86 or ARM). It installs Python, builds REBOUND 5.1.1 with OpenMP, and joins your tailnet. Then add its SSH target here, Probe, and Benchmark.</p>
+      </details>
+    </section>
+  </aside>
+</div>
 <div id="toast" role="status" class="toast hidden"></div><script type="module" src="/app.js"></script></body></html>

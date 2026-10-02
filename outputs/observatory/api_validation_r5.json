@@ -12,26 +12,39 @@
   "over_budget_error": "Estimated 561 h exceeds the 120-hour compute cap. Maximum span for these settings is about 1069.0 model time units.",
   "n_galaxies_6_error": "n_galaxies must be one of [1, 2, 3, 4, 5]",
   "five_galaxy_10000_ok": true,
-  "summary_bytes_per_job": 5521,
+  "summary_bytes_per_job": 5891,
   "pause_survives_restart": true,
-  "pause_frame": 3,
+  "pause_frame": 6,
   "recovered_frames": 201,
   "recovered_time": 3.9999999999999587,
   "lifecycle": {
     "births": 1198,
-    "deaths": 201,
-    "supernovae": 21,
+    "deaths": 204,
+    "supernovae": 25,
     "counts": {
       "gas": 2,
       "protostar": 0,
-      "main_sequence": 2785,
-      "giant": 12,
-      "white_dwarf": 180,
-      "neutron_star": 16,
+      "main_sequence": 2783,
+      "giant": 11,
+      "white_dwarf": 179,
+      "neutron_star": 20,
       "black_hole": 5,
       "halo": 6998,
       "smbh": 2
     }
+  },
+  "track": {
+    "frames": 201,
+    "disk_r_kpc_first_last": [
+      5.587,
+      4.232
+    ],
+    "incremental_ok": true,
+    "black_hole_r": 0,
+    "earth_r_au_min_max": [
+      0.9833,
+      1.0165
+    ]
   },
   "isolated_n_galaxies_1_ok": true,
   "planets_energy_change": 4.1733817359192625e-16,
@@ -41,7 +54,7 @@
   "running_delete_rejected": true,
   "protected_delete_rejected": true,
   "finished_delete_ok": true,
-  "lab_page_has_no_three": true,
+  "single_page_lazy_three": true,
   "bytes_per_particle": 24,
-  "model_revision": 4
+  "model_revision": 5
 }

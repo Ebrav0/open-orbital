@@ -12,7 +12,7 @@
   "over_budget_error": "Estimated 561 h exceeds the 120-hour compute cap. Maximum span for these settings is about 1069.0 model time units.",
   "n_galaxies_6_error": "n_galaxies must be one of [1, 2, 3, 4, 5]",
   "five_galaxy_10000_ok": true,
-  "summary_bytes_per_job": 5521,
+  "summary_bytes_per_job": 5522,
   "pause_survives_restart": true,
   "pause_frame": 3,
   "recovered_frames": 201,

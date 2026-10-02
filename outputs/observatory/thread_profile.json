@@ -1,0 +1,25 @@
+{
+  "checkpoint": "/Users/emmanuelbravo/Desktop/Open Orbital/work/observatory-data/67be855d5342/checkpoint-000021.bin",
+  "steps": 6,
+  "includes_lifecycle": false,
+  "results": [
+    {
+      "wall": 5.130643917014822,
+      "cpu_percent": 728.6212336043512,
+      "threads": 10,
+      "binding": "close"
+    },
+    {
+      "wall": 4.445972416026052,
+      "cpu_percent": 941.9094875408831,
+      "threads": 14,
+      "binding": "close"
+    },
+    {
+      "wall": 4.109187458001543,
+      "cpu_percent": 1040.366506442889,
+      "threads": 14,
+      "binding": "false"
+    }
+  ]
+}

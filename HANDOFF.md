@@ -1,4 +1,26 @@
-# Lab research interface — Codex, 2026-09-23 EDT
+# Agent handoff — Open Orbital
+
+## Branches reconciled; Real World Physics merged to main — Claude Opus 5.5, 2026-10-02
+
+The user asked to scan the other PR, merge or delete it, and get this update onto main.
+- **Merge.** `real-world-physics` (8c9db9b) and origin/main had diverged at 29bde3f: origin/main had the Linux port 3e9cd15 and PRs #3/#4; local had 33709a5. The merge was done in a separate git worktree. A first attempt in the live checkout conflicted and its abort failed ("not uptodate"); the checkout was restored to 8c9db9b within ~2 minutes with no job running.
+- **Resolution.**
+  - `lab/` and `.github/` come from origin/main (the reviewed PR #3/#4 versions supersede the 2026-09-22 working copy; no files existed only in the local copy).
+  - `lab.html`/`lab.js` stay deleted (one-page UI).
+  - Observatory code keeps this branch's side, with the Linux port added on top: libgomp lookup in `set_threads` (non-raising), `cpu_label()`, the `/proc` zombie check, `alive()` before a local spawn, caffeinate-aware sleep and platform-aware lid fields in /api/system, the portable `validate_threads.py`, the shared.js thread hint, and `OBSERVATORY_TEST_REPORT` for `validate_physics.py`. LINUX_*.md, the systemd unit and `benchmark_galaxy.py` come in from main.
+  - `.gitignore` is the union of both; both sides' HANDOFF entries are kept (the Codex lab entry moved under this title).
+- **PR #2** (draft, two-phase grid ISM, cursor/ism-gas-interactions-495d) was closed unmerged with an explanatory comment. It predates the revision-5 fixes and the one-page UI, reuses revision numbers 5/6 for other models, and would double gas pressure and SN kicks on top of SPH. Its head cf5f59f is kept as tag `archive/pr2-two-phase-ism` (its cooling/metals/ionization/FUV are the reference for a future SPH energy equation). Branch deleted.
+- **Deleted remote branches, verified contained in main:** `cursor/galaxy-collision-lab-428d` (content identical to squash 1c00db9) and `lab-scheduler` (ancestor of main).
+- **Left alone:** `codex/natural-language-research` has 3 commits from 2026-10-01 not in main or any PR (Cube control-plane launcher, Cube node docs, a 12-thread option). That is another agent's live work.
+- **Measured on the merged tree** (worktree with `work/venv`/`work/openmp` symlinks to the Mac runtime; every report written to the session scratchpad, so no evidence file was rewritten):
+  - `python -m unittest discover -s lab/tests` → 41 OK.
+  - `validate_physics.py` → exit 0, 39 s; 60/61 metrics identical to the historical `validation_r5.json` (only `lifecycle_speed40_2048.wall_seconds`).
+  - `validate_api.py` → exit 0, 11 s. `validate_queue.py` → exit 0, 17 s.
+  - `validate_realistic.py` → exit 0, 361 s, all 10 checks true.
+  - `validate_nodes.py` → ok, 211 s.
+  - Not run: `validate_million.py`, `validate_threads.py`, `validate_node_live.py`; browser check of the merged UI. The UI files equal this branch's side apart from one hint string.
+
+## Lab research interface — Codex, 2026-09-23 EDT
 
 Implemented the natural-language Lab workflow in isolated worktree `/home/edb/open-orbital-research`, branch `codex/natural-language-research`. Existing dirty Linux-port, Observatory, benchmark, and Lab prototype files remain unstaged and preserved. The original `/home/edb/open-orbital` checkout was not changed by this worktree.
 
@@ -18,8 +40,229 @@ Manifests retain the original request/dialogue, objective, resolved configs, swe
 
 ---
 
-# Agent handoff — Open Orbital
+## cloudnode1 (OVH) retired — Claude Opus 5.5, 2026-10-01
 
+User has a new VM and asked to clear cloudnode1 from the codebase. Done:
+- `DELETE /api/nodes/cloudnode1` on live :8766 → registry `work/nodes.json` now holds only computenode1 (GET /api/nodes: local, computenode1).
+- Run `7ffea0bd7149` (complete, 222/222 frames on the Mac, `synced_complete`) was re-homed: `location.json` node → `local`, plan cleared, its cloudnode1 history segment closed at frame 222, and `retired_node` recorded. The original is kept as `location.cloudnode1-backup.json` in the run folder. Frames, status and `.hub` are untouched. The timeline still lists the cloudnode1 segment (drawn in the default colour).
+- The README example now says "another node"; 12 cloudnode1 allow rules were removed from `.claude/settings.local.json` (backup in the session scratchpad).
+- Older handoff entries mentioning cloudnode1 are left as history.
+
+Not done by the agent: deleting the OVH VPS (`vps-1a2db40e.vps.ovh.ca`) and removing it from the tailnet. Both are account actions the user must take in the OVH manager and the Tailscale admin console. `~/.ssh/known_hosts` still has entries for `cloudnode1` and `148.113.254.109`. The remote copy of the run on that VM was not deleted (no access). No job running; server not restarted.
+
+## Real World Physics toggle (model revision 6) — Claude Opus 5.5, 2026-09-29/30
+
+**Ask.** The user's 2-galaxy run `f559cd291229` became a "giant pulsating blob" after ~4 Gyr instead of one new galaxy. They asked for the numbers to be checked, accuracy over particle count, and a Compute tab with one toggle, "Real World Physics", building in as much real physics as possible.
+
+**Diagnosis (measured from saved frames; read-only scratch scripts; the run was not modified).** 30k particles; B = 3× A's mass at 0.45× its size; revision 5; 5 Gyr.
+- Exact direct-sum softened energy went −385.92 → −385.02 (+0.23%) over 5 Gyr. The UI's 6.1% was the Monte Carlo estimate (±10%).
+- A (low density) was tidally shredded by ~500 Myr. The fraction of A's disk within 3 kpc of A's centre went 0.20 → 0.01, and A's stars end at a median 24.5 kpc from B. A's stripped SMBH oscillates 1–33 kpc from the centre (~170 Myr radial period) for 4.5 Gyr: the likely "pulse".
+- B's disk inertia axis ratio c/a went 0.04 → 0.18 (0.5 Gyr) → 0.35 (1.5 Gyr) → 0.65 (5 Gyr); final v_φ/σ 0.79.
+- Control, B alone, revision 5, lifecycle off, no collision. At 22.5k, c/a 0.30 at 1.4 Gyr and 0.37 at 2 Gyr. At 90k, 0.19 at 1.9 Gyr (≈4× slower in σ² terms). At 22.5k with dt/4 and 54 pc softening, 0.45 at 1.8 Gyr (worse).
+- Softening scan, 22.5k, c/a at 1 Gyr: 54 pc 0.30, 120 pc 0.28, 180 pc 0.24, 270 pc 0.23, 390 pc ~0.18 (at 800 Myr; stopped early).
+- Conclusion: two-body particle noise, not the merger, turned B into a spheroid. Particle count is the accuracy lever for long runs.
+
+**Change** (config `realistic: true` → `model_revision` 6; revision ≤5 code paths untouched):
+- `physics.py`: `REALISTIC_REVISION=6`, `galaxy_params` accepts 6 and forces lifecycle on at speed 1, and `build_one_galaxy_r6`.
+  - Halo: tapered Hernquist (ρ_H − ρ_H(300 kpc)), a = 0.54 × the Plummer slider for the same half-mass radius. Speeds come from `eddington_speeds`: Eddington inversion in the softened halo potential plus spherical disk plus softened BH (Barnes 2012), logit-coordinate interpolation, log-spaced τ quadrature, and speed CDF in θ.
+  - Disk: σ_R cap 0.6 v_c; the first round(nd·gas_fraction) disk particles are a cold gas disk (c_s 10 km/s, thickness max(c_s/ν, ε/2)).
+  - `realistic_settings`: ε = the mean midplane particle spacing at R = Rd in the densest disk, clipped 30–450 pc. dt_initial = √(2ηε/a_max) (η 0.025), capped at 0.02.
+  - `heating_times`: particle-noise estimate from Binney & Tremaine eq. 7.106.
+  - `meta.realistic`, `meta.physics`, sources.
+- `stellar.py`: `kroupa_pdf`, `ssp_tables` (0.0109 SN/M☉, 42% returned by 10 Gyr), `new_baryons_ssp`. save/load store `pending` and `ssp` extras only when present.
+- New `realistic.py`, the `Engine` used per step:
+  - SPH at the current state, then dt = min(gravity, Courant 0.3, 0.02), shortened to land on the frame.
+  - ½ SPH kick → REBOUND step → ½ SPH kick.
+  - Stellar-population mass return and SN momentum (2.8e5 M☉ km/s × n^−0.17, net vector removed, 32 gas neighbours within 1 kpc).
+  - Stochastic star formation at ε_ff 1% above 0.1 H/cm³.
+  - Reads and writes REBOUND memory through a checked 112-byte particle view.
+- `worker.py`: revision 6 when config.realistic; 241 evenly spaced frames; archives `realistic_source.py`; `status.realistic` = per-frame dt, limiter, min dt, gas count.
+- `nodes.py`: `ENGINE_FILES` and `SMALL_PULL` include `realistic.py` / `realistic_source.py`.
+- `server.py`: schema key `realistic`; normalize forces lifecycle; cached `realistic_info`; `POST /api/realistic`. The estimate uses dt_initial plus measured SPH/lifecycle per-step cost (2 ms + 15 µs/gas + 0.08 µs/particle; measured 31/92/191 ms at 30k/100k/200k on 8 threads).
+- UI: new **Physics** panel tab with the single toggle. It explains each change, and shows the particle-noise time per galaxy (Real World vs Standard), the cost, and what is not included. On New, a banner appears and the dt, softening, lifecycle, t_sf, speed, bias, protostar-accretion and remnant-kick rows lock with their physical values. The Run panel shows timestep and limiter, populations, SF, SNe and feedback. The legend and inspector say young stars / stellar population.
+- README section added.
+
+**Earlier in this session (UI only).** The New tab's "Reset settings to defaults" button moved above the sliders. The Run tab got a live COMPUTE SPEED card (simulated time per wall second, steps/s, particle-steps/s, computed in the page from polled status).
+
+**Measured.**
+- `PYTHONPATH="$PWD/work/openmp" work/venv/bin/python outputs/observatory/tests/validate_realistic.py` → `validation_r6.json`, exit 0, 328 s, all checks true.
+  - SSP 0.0109 SN/M☉ and 0.423 returned at 10 Gyr. SPH momentum 1e-15; colliding clouds KE → 0.60.
+  - Jeans σ_r² ratio 0.98–1.01 for r = 0.59–65 (default disk and a compact BH galaxy). The r = 0.14 shell reads +1–10% across seeds (mean ≈ +5%) and is recorded but not asserted.
+  - SF law: 325 births vs 300 expected (+1.4σ).
+  - Isolated 30k over 490 Myr, halo r10/r50/r90 max|final change: rev6 4.4/2.7/1.3 | 0.8/0.01/0.9%; rev5 2.1/1.7/2.8 | 0.04/1.1/2.8%.
+  - Worker 10k 2 galaxies: mass conserved; SIGTERM at frame 101 then resume gives byte-identical frames.
+- `validate_physics.py` (historical `validation_r5.json` backed up and restored, same sha1 fe2155…): 60/61 metrics identical, only `lifecycle_speed40_2048.wall_seconds` differs (1.25 → 1.30 s).
+- `validate_api.py` with the report to scratch → ok, 11 s. `validate_nodes.py` with the report to scratch → ok, 170 s. `python -m unittest discover -s lab/tests` → 14 OK.
+- Browser (isolated :8768, temp data, removed): toggle, locks, estimate, Physics tab at 800 px and 375 px (no overflow); a 10k realistic run started from the UI completed as revision 6; Run diagnostics and legend render; no console errors. The pane was hidden, so polling paused by design; checked after a reload.
+
+**Not done / open.**
+- No long realistic science run yet. Predicted: the user's collision at 30k × 5 Gyr on 14 threads ≈ 1.3 h from the starting step; close passages will lengthen it.
+- The 22.5k softening scan shows that ε = particle spacing heats a disk faster than 180 pc would at low N; this is a resolution trade-off.
+- Low N under-resolves SF and feedback: in the 10k test, 73% of SN momentum found no gas within 1 kpc (reported as unused), and 1 star particle formed in 98 Myr.
+- A realistic run on a real node is untested (engine push is covered only by the fake-node suite).
+- No BH accretion/AGN, no cooling below 10⁴ K, no planetary GR.
+
+**Server/runs.** :8766 restarted via `launchctl kickstart -k` on 2026-09-30 (pid 39256) after confirming all six runs complete, no worker and the queue held/empty. The new endpoint answers. Saved runs untouched. No job running.
+
+## Cloud node diagnostic — Codex, 2026-09-29 16:30 EDT
+
+- Read-only live checks confirm the failure is SSH authentication for `ubuntu@cloudnode1`, before the Python runtime or worker can be inspected. `ssh -vv -o BatchMode=yes -o ConnectTimeout=8 -o ConnectionAttempts=1 ubuntu@cloudnode1 true` → exit 255: DNS resolves to 100.121.220.52, TCP and SSH handshake succeed, the known ED25519 host key matches, this Mac's id_ed25519 key is offered and rejected, ending in `Permission denied (publickey,password)`. No password was attempted.
+- `tailscale ping --c 2 --timeout 5s cloudnode1` → exit 0, direct pong in 51 ms. `ssh -o BatchMode=yes -o ConnectTimeout=8 -o IdentitiesOnly=yes -i ~/.ssh/id_ed25519 edb@computenode1 'printf "key-login-ok\\n"'` → exit 0, `key-login-ok`. The Mac key works on the home node; cloud-side authorized_keys, permissions, account state or SSH policy need inspection through the OVH console. Exact underlying cause remains unverified without authenticated access.
+- GET `/api/nodes` on existing :8766 confirms computenode1 ready, cloudnode1 rejected at authentication. GET `/api/jobs` reports all four saved jobs complete, including cloud run `7ffea0bd7149`, with `synced_complete: true` and 222 locally available frames. GET `/api/queue`: held, empty. No existing provider console was available in this chat's browser surfaces; Arc's visible window was Google Docs.
+- No source/runtime/network/authentication changes, restarts, new simulations, password retries or benchmark writes. Existing :8766 server remains running. Remote process/service state cannot be established through the rejected login. Next step: authenticated OVH KVM/console to inspect Ubuntu SSH auth logs and `/home/ubuntu/.ssh` ownership/permissions/key presence before deciding on a repair.
+
+## Gravity bugs: model revision 5 — Claude Opus 5.5, 2026-09-29
+
+User saw every galaxy in 5-galaxy run `7ffea0bd7149` hollow into expanding rings. Measured from its frames: each disk's 10th-percentile radius went 0.30 → 1.45 units by frame 8 (~35 Myr), before any encounter, so the cause was the initial conditions, not the collision.
+
+**Bugs found and fixed.**
+1. `physics.build_one_galaxy` set disk rotation from the razor-thin, unsoftened Freeman curve. Real pull of the Gaussian-thick disk under Plummer softening is weaker near the centre. For that run's settings (`disk_mass 5`, `halo_mass 13`, `halo_scale 6.2`, `disk_scale .5`, `disk_thickness .14`, `softening .06`), Freeman over direct summation was 2.23 / 1.67 / 1.39 / 1.21 at R = .1 / .25 / .5 / 1. Defaults are halo-dominated and thin, so they were barely affected. New `disk_midplane_vc2()` is the exact Hankel form: a softened pair at vertical offset z' equals an unsoftened one at sqrt(z'²+ε²). It is splined over 160 radii. Revision 5 also uses the truncated halo's true interior mass (`Mh·(rmax²+a²)^1.5/rmax³`, +0.6% at a = 6.2).
+2. `worker.advance_galaxy`: on "outside of simulation box", REBOUND (`tree.c` `reb_tree_construct`, `gravity.c`) had already finished the step with a partial tree. Every particle from the escaper onward exerted no gravity. The old retry kept that step and took an extra one. New `physics.ensure_tree_box_for_step()` checks `max|x + v·dt/2|` (DKD midpoint) before every step and grows the root (×4 margin). The retry is removed. This applies to all runs, including resumed revision-4 runs. Cost: 8.8 ms/step at 1M (vs ~5.7 s/step).
+3. `stellar.step` moved mass (accretion, ejecta) without momentum. Revision 5 carries it (inelastic merge for the receiver; the donor's velocity is unchanged). It is gated on `params['revision']>=5`, so revision-4 runs resume with their original lifecycle.
+
+**Revision plumbing.** `MODEL_REVISION=5`. `GALAXY_DEFAULTS['revision']=4`, so bare `galaxy()` still bit-matches revisions 2–4. `worker.py` (new runs) and `server.preview` pass `revision=MODEL_REVISION`. Galaxy `meta.model_revision` is `P['revision']`. Planets stamp 5, but their physics is unchanged. `validate_api.py` asserts 5; `validate_million.py` asserts `>=4`.
+
+**Measured.**
+- `PYTHONPATH="$PWD/work/openmp" work/venv/bin/python outputs/observatory/tests/validate_physics.py` → exit 0, 39 s, writes `validation_r5.json` (the script now writes r5; `validation_r4.json` was not written). Every revision-4 key equals `validation_r4.json` except `lifecycle_speed40_2048.wall_seconds`. Revision-3 bit-match 0.0.
+- New keys: disk curve / direct sum 0.997–1.004; thin limit / Freeman 0.967–0.9998. Compact settings, 20k particles, t = 3: half-mass growth rev4 +150%, rev5 +40%. Default 2048, t = 10: rev5 energy 3.77e-5, disk +10.0% (rev4 4.40e-5, +10.8%). Lifecycle per-step relative momentum change: rev4 3.1e-5, rev5 2.3e-18. Edge escaper: the unguarded step raises after finishing, and the next particle's vx is −0.01130 vs −0.01275 guarded.
+- `OBSERVATORY_NODES= OBSERVATORY_TEST_REPORT="$PWD/outputs/observatory/api_validation_r5.json" PYTHONPATH="$PWD/work/openmp" work/venv/bin/python outputs/observatory/tests/validate_api.py` → ok, 10.5 s.
+
+**Still open (not changed).**
+- The run's `warmth 0.4` requests Toomre Q = 0.6, which is unstable by design. `sigma_r` is also clipped at `.35·max(1,warmth)`, so the realized centre Q is ~0.3. Revision 5 therefore still spreads in that case (+40%). Consider a UI warning or scaling the clip with v_c.
+- `diagnostics.jsonl` repeats the last full diagnostics (computed every 40 frames) on every frame. That is why disk_half_radius looked frozen at 1.06.
+- Not run: `validate_nodes.py`, and a browser check (no UI change).
+
+**Server/runs.** :8766 was not restarted, so the preview keeps revision-4 ICs until the next restart. The live server doesn't import physics for jobs; each new worker process does, so new local runs already use revision 5. Node engines are pushed by content hash, so the next remote start or hand-off ships revision-5 code. `7ffea0bd7149` (revision 4, on cloudnode1, final leg) and the other saved runs were not touched. No local worker was running.
+
+## One-time password to install the SSH key on a node — Claude Opus 5.5, 2026-09-29
+- Unreachable node cards now show a password field + Connect. `POST /api/nodes/<id>/install-key {password}` → `nodes.install_key()`: appends this Mac's public key (`~/.ssh/id_ed25519|ecdsa|rsa.pub`, creating id_ed25519 if none) to the node's `~/.ssh/authorized_keys` (no duplicates, chmod 700/600), then re-probes. The password reaches ssh only via `SSH_ASKPASS` + `SSH_ASKPASS_REQUIRE=force` in the child's environment; it is never written to disk, logged (log_message is silenced) or stored. All other SSH stays key-only BatchMode.
+- The node poll (every 6 s) skips re-rendering the node cards while a password field has focus or text, so typing is not wiped.
+- Tested: syntax checks; `install_key` rejects empty/over-1024-char passwords; against a dummy node at 127.0.0.1 it reports "Connection refused" cleanly. Browser: the field renders on the cloudnode1 card at desktop and 375 px widths, no console errors. **Not tested against a real password-auth sshd**: the askpass path is unverified end to end. Nodes with `PasswordAuthentication no` will still reject it (the message says so).
+- The server on 8766 was **not restarted** (job `b53e3ff252f3` and others are in the library); the new route and error wording take effect after a graceful restart. Static UI changes are already served.
+- **cloudnode1 key loss investigation (same day, later).** Measured: Tailscale direct path OK, sshd (OpenSSH 10.2p1) answers, host key unchanged (VM not rebuilt), this Mac's only key `SHA256:Ohe991…` (unchanged since 2026-03-08) is offered and rejected by `ubuntu@cloudnode1`; the same key still works on computenode1; no agent keys; no Tailscale SSH on cloudnode1; computenode1 has no key there. Last successful cloudnode1 sync: 2026-09-29 01:01 EDT (run `7ffea0bd7149`). So the node's `authorized_keys` lost the key or its home/.ssh permissions changed (StrictModes); which one could not be seen without logging in. `install_key` now prints the pre-repair state (perms of ~, ~/.ssh, authorized_keys mtime, whether the key was present, sshd AuthorizedKeysFile/StrictModes via `sudo -n`) to `work/observatory-data/server.log` as `[install-key …]`, and also runs `chmod go-w ~`. Script tested in a temp HOME on computenode1 (repairs a 777 home, installs the key). Service restarted with `launchctl kickstart -k` at 2026-09-29 ~09:47 EDT after confirming no job running (c9f32fae5585 paused, queue held).
+- User's Connect attempt: password rejected. Verified the askpass path works (ssh -v shows `read_passphrase: requested to askpass`, helper called with the password prompt, server replied Permission denied) using one deliberately wrong password. So cloudnode1 now rejects both the key and the user's password, which worked on 09-28. Public IP 148.113.254.109:22 accepts TCP but sent no SSH banner in two tries (filtered by a proxy, or sshd saturated; unknown). Next step needs the OVH web console/KVM or rescue mode: check `~/.ssh/authorized_keys`, `/var/log/auth.log`, `last`, `passwd -S ubuntu`, and if anything is unexplained treat the VM as compromised and rebuild. Do not retry passwords repeatedly (fail2ban/lockout).
+- **OVH-side check (2026-09-29 afternoon).** VPS is `vps-1a2db40e.vps.ovh.ca` (OVH US account, Canada, installed 2026-09-28 21:37 UTC). OVH status pages: no current VPS/BHS incident; a global "Delivery incident" for dedicated/VPS (software issue) ran 09-28 18:00 → 09-29 08:13 UTC, overlapping the window in which access broke (after 05:01 UTC); only BHS cooling/network maintenance otherwise. The owner's Gmail has an OVH email "Restarting in rescue mode" at 2026-09-29 17:28 UTC (root password via a one-time OVH secret link; links the anti-hack guide). The key was already failing ~13:30 UTC, so rescue mode is not the original cause. At 16:26 EDT the VM runs its normal OS (Tailscale up, usual host key) but still rejects the key; Tailscale counters reset, so it has rebooted. Not yet known: who requested rescue mode (user or OVH security) and what changed `authorized_keys`/the password. Needs the OVH manager (not signed in in the browser pane; the agent must not sign in) or the rescue root login.
+
+## Dashboard slowdown during heavy runs — Claude Opus 5.5, 2026-09-28
+
+The user reported the dashboard slowing a lot during serious computations. Four causes were investigated and addressed. Physics numerics, ICs and frame format are unchanged, so there is no model-revision bump.
+
+**Causes found (measured 20:50–21:00).**
+1. A 14-thread worker used every core (10 P + 4 E) at `USER_INITIATED` QoS (priority 37, above the server's 31).
+2. `~/Desktop` is in iCloud Drive, and `work/observatory-data` (3.3 GB) was being synced. A 1M run writes a ~138 MB checkpoint plus a 24 MB frame per chunk. After the pause, `fileproviderd`, `bird` and `cloudd` were the top CPU users.
+3. 24 GB RAM with 4.6/6 GB swap in use.
+4. Bug: the frames endpoint rejected any request over 8 MB, so 1M frames (24 MB) always returned 400, and `viewer.js` re-requested them on every animation tick. A simulated 108 req/s storm did not slow the server's polls, so this was a correctness bug more than a load source.
+
+**Changes.**
+- `physics.py` `_set_worker_qos()` (replaces `_set_qos_user_initiated`): the worker defaults to `utility` QoS. `OBSERVATORY_WORKER_QOS=user_initiated|default|utility` overrides it. On Linux nodes it is a no-op, as before. Thread count is still honoured, not capped.
+- `server.py` frames block: a single frame is always served; the 8 MB cap applies only when `count>1`.
+- `viewer.js` `request()`: failed frames back off 1 s, doubling to 30 s, per job:frame.
+- Data: the server was stopped, then `work/observatory-data` was moved to `work/observatory-data.nosync` with a symlink left at the old path. `.gitignore` and README were updated. No evicted (dataless) files were found before the move. iCloud will drop its cloud copy of that folder; the local files are intact.
+
+**Measured.**
+- `OBSERVATORY_NODES= OBSERVATORY_TEST_REPORT="$PWD/outputs/observatory/api_validation_perf.json" PYTHONPATH="$PWD/work/openmp" work/venv/bin/python outputs/observatory/tests/validate_api.py` → ok, 10.2 s, no false assertions.
+- `validate_physics.py` → exit 0, 30 s. 45/46 metrics identical to the prior `validation_r4.json`. The only difference is `lifecycle_speed40_2048.wall_seconds` (1.27 → 2.01 s). The prior `validation_r4.json` was restored afterwards.
+- `OBSERVATORY_TEST_REPORT="$PWD/outputs/observatory/nodes_validation_perf.json" … validate_nodes.py` → ok, 232 s.
+- Live :8766 after the restart:
+  - 1M `c9f32fae5585` frame 65: 200, 24,000,000 B in 21 ms (6 MB with the redesign session's `every=4`); `count=2` still 400.
+  - Browser: 1M run plays thinned, 0 failed frame requests, no console errors.
+  - Forced 400s: each frame retried 4× in 15 s, then recovered.
+- QoS benchmark (scratch scripts, not in repo): 200k × 2 galaxies × 14 threads, with three default-QoS "render loop" probe processes (4 ms of work per 16.7 ms deadline). Machine shared with other sessions, so the numbers are noisy.
+  - Worst stall: utility 21/21/54/21/21 ms vs user_initiated 108/109/34/67/18 ms.
+  - Missed probe frames: about the same (~0.6% vs ~0.7%).
+  - Step time: utility ~5–25% slower (e.g. 0.51–0.66 vs 0.47–0.62 s/step).
+  - The benefit is fewer worst-case spikes, not fewer missed frames. Keep or revert as the user prefers.
+
+**Not measured.** iCloud load with a real local run after the move (none was running locally). Real foreground-browser FPS (the embedded pane is hidden and throttles rAF).
+
+**Server.** :8766 restarted 21:21 via stop-daemon.sh + `launchctl bootstrap` (2 s down). `data_directory` = `work/observatory-data.nosync`. Jobs: `7ffea0bd7149` running on computenode1, `67be855d5342` complete, `c9f32fae5585` paused at 66. No local worker. The same restart picked up the star-inspector and 1M-thinning server changes from the other two sessions.
+
+## 1M playback: thinned display — Claude Opus 5.5, 2026-09-28 (late)
+
+User reported choppy 1M playback. Causes: (1) the live server rejected every 24 MB frame (8 MB cap) and the viewer retried every tick — fixed by the parallel "Dashboard slowdown" session (single-frame exception + retry backoff; live after its :8766 restart); (2) sheer volume: 24 MB per frame × ~5 frames/s of playback, two full buffer copies + GPU uploads per step, GC churn. Change: `server.py` frames endpoint takes `every=1..64` (`display_sample()`: 0, k, 2k… then each SMBH); `viewer.js` draws a strided sample above 250k particles (k=ceil(n/250k): 1M → 1 in 4), point size ×√k for equal light, uploads only the newly needed frame per step (ping-pong buffers), and translates particle ↔ display indices so the star inspector and `/track` keep particle indices; falls back to thinning a full frame if a server ignores `every`. Layers → **Full detail** restores every particle. Status line says "drawing 1 in k". Physics and saved data unchanged.
+**Measured** (isolated :8768 on an APFS clone of `c9f32fae5585`, clone removed): every=4 frame 6,000,000 B vs 24,000,000 B, identical to the client rule; server serves a full 24 MB frame in 12 ms (not the bottleneck); page heap 122 MB thinned vs 325 MB full; inspector pick → particle #100,900 with its 66-frame track; no console errors. **Not measured:** FPS — the embedded pane was hidden (rAF throttled to ~1 Hz in both modes); check in the user's browser. A camera re-framing heuristic was tried and reverted (saved `camera_distance` is ~0.45–0.56 of a fitted distance for every run, so it would have re-framed all runs).
+
+## Star inspector (click a body, see its live stats and saved track) — Claude Opus 5.5, 2026-09-28
+
+User asked to click a star in the 3D view, see its stats update as the simulation progresses, and see its past track and statistics. Refresh once per saved frame was accepted, and it had to work in both saved/live runs and the composer ("collision lab") preview. Physics, ICs, worker and frame format are unchanged (no model-revision bump; `validate_physics.py` not re-run).
+
+**Server.** `track_particle` in `server.py` (unused leftover from an older page) was rewritten with a numpy memmap. `GET /api/jobs/:id/track?index=i&start=k` returns row i of frames k…, plus `r` (distance from its galaxy centre), `height` (off its fitted disk plane, null when the sample's smallest/middle singular value > 0.45), `nearest` / `nearest_r` (closest galaxy centre), component, galaxy id and units. Planets: `r`/`height` relative to the Sun, plus the body name. Centre = the galaxy's SMBH when present, else a shrinking-sphere density centre of 1,024 strided disk particles. Centres are cached in memory in `CENTER_CACHE` per run; frames after `checkpoint.json` index are recomputed, and the cache entry is dropped on Remove. Nothing is written to run folders.
+
+**UI.** `viewer.js`: click-not-drag picks the nearest visible body on screen within 12 px (22 px for planets); hidden layers can't be picked. Screen-sized ring sprite; additive track line through saved positions up to the playhead, ending at the interpolated ring; `focusSelected`, `setFollow`, `sample`. `app.js`/`index.html`/`style.css`: an inspector card over the stage (a bottom sheet under 760 px) with live values from the saved frame under the playhead, charts with a playhead line and stage-change marks, a summary and an event list. The track is fetched incrementally on each poll when `status.frames` grows, and refetched if frames go backwards. Esc/✕ clear it; switching runs or re-previewing clears it. Preview picks show initial values only (no track, and no mass, since preview particles carry N/8,000 × the run's mass).
+
+**Measured.**
+- `OBSERVATORY_NODES= OBSERVATORY_TEST_REPORT="$PWD/outputs/observatory/api_validation_inspector.json" PYTHONPATH="$PWD/work/openmp" work/venv/bin/python outputs/observatory/tests/validate_api.py` → ok, 11.1 s. New assertions: the track matches `frames.bin` for all 201 frames; incremental `start` equals the tail; the SMBH has r = 0 in every frame; index ≥ n → 400; Earth r 0.9833–1.0165 AU. `api_validation_r4.json` was not rewritten.
+- `track_particle` read-only on the saved library: 200k 0.96 s cold / 0.01 s warm; 1M (`c9f32fae5585`, 66 frames) 0.75 s cold; 5-galaxy 30k with SMBHs 0.03 s.
+- Browser (embedded, isolated :8768, temp data, removed afterwards): 30k two-galaxy live run: pick → card; track appended as frames arrived (`start=12,14,15…`); Centre view, pause, and card scrolling worked. Planets: Jupiter 4.97 AU, 13.6 km/s, 318 M⊕. Composer preview pick works. 1440 px and 375 px, no horizontal overflow; no JS errors. (The only console errors were `/api/nodes`, caused by launching with `OBSERVATORY_NODES=` empty, which nodes.py reads as `.`. This is pre-existing and unrelated.)
+- Not measured: click-pick cost on a 1M frame in a real GPU browser (it's a single JS loop over the displayed buffers), and the inspector on live :8766, which still runs the old server.py until it restarts.
+
+**Server state.** Live :8766 was not restarted by this session. The "Dashboard slowdown" session announced a graceful restart plus moving `work/observatory-data` to `.nosync`. The isolated :8768 server and its test runs were stopped and deleted.
+
+## cloudnode1, standby pick-up, multi-machine chains, twin runs — Claude Opus 5.5, 2026-09-28 (evening)
+
+User asked to connect OVH VM `ubuntu@cloudnode1` and computenode1 so that (A) a node picks up a Mac run when the Mac closes/sleeps, (B) a run can be split across all three machines, (C) one more idea (chose twin runs). Physics, ICs and frame formats unchanged; `physics.py`/`stellar.py`/`worker.py` untouched.
+
+**cloudnode1.** Key installed by the user typing the password into a terminal command the agent started (the agent never entered a password). Ubuntu 26.04, 6 cores x86_64, 11 GB RAM, Python 3.14.4, passwordless sudo, Tailscale already up. `node/bootstrap.sh` run over SSH (first real run): numpy 2.5.3, scipy 1.18.1, REBOUND 5.1.1 built with OpenMP (`OpenMP linked: True`). Registered as `cloudnode1` (label "cloudnode1 (OVH)", always on). Benchmarks through the app, same workload (100k × 2 galaxies × 3 steps, all cores): **computenode1 2.33 s/step (4 thr) → factor 2.81; cloudnode1 2.61 s/step (6 thr) → factor 4.72**. computenode1's earlier 6.21 came from 1M particles — factors depend on N; estimates remain predictions.
+
+**(A) Standby.** `nodes.py`: while a Mac run computes, the Mac stages its latest checkpoint pair into `<runs>/jobs/<id>` on the standby node (staging dir + swap; never overwrites a copy already picked up), writes `standby.json` (armed, index, threads, absolute engine path), and touches `<runs>/hub-heartbeat` every 10 s, (re)starting a stdlib `standby_watchdog.py` there. Watchdog resumes armed copies when the heartbeat is >90 s old and reaps its children. Mac side, on the next heartbeat after waking: sees `taken`, SIGTERMs its own worker, truncates Mac frames to the copy's index, records a `standby pick-up` history segment and follows the node; `return_on_wake` hands back once a sync has seen the node's worker alive. Armed state persists in `location.json` (`standby.armed_on`, `index`, `pushed_at`); paused/finished runs are disarmed; hand-offs disarm first; remote starts delete stale `standby.json`. Copy interval 2 s/MB clamped 2–30 min.
+**(B) Chains.** `location.plan = {legs:[{node,until}], leg}`; old `{at,to,from,done}` is read as two legs (`plan_of`). Up to 5 legs. Cap check is the whole-run sum. UI legs editor with per-leg estimate bar and timeline markers.
+**(C) Twins.** `POST /api/jobs {twin: node}` creates two linked runs (`location.twin`, `config.twin/twin_of`) started together; `GET /api/jobs/:id/twin` returns per-frame median/p90/max particle separation (strided ≤20k sample, memmap) + diagnostics, cached in `twin_compare.json`. Run panel twin card with chart; ⧉ marker in the library.
+
+**Bugs found and fixed by the tests.** (1) Watchdog-launched workers became zombies after exiting, so `kill_remote` reported "did not stop" and the hand-back failed — watchdog now reaps; stop check treats `Z` as stopped. (2) `sync()` published a finished status before updating liveness, so a node could look busy for a moment — liveness now updated first. (3) **Pre-existing race**: right after a hand-off the node's `frames.bin` is briefly shorter than the stint start; a sync then truncated the Mac's frames and refilled them with the node's sparse zeros (playback only, physics unaffected). Sync now never truncates below the current stint's first frame. The old live server ran the unfixed code until the restart below.
+
+**Measured.** `work/venv/bin/python outputs/observatory/tests/validate_nodes.py` → `outputs/observatory/nodes_validation.json`, ok, 219.5 s: all earlier scenarios plus chain Mac→fake→fake2 (hand-offs at frames 54/118), twins (max divergence 0.0 on one CPU), standby: server + Mac worker SIGSTOPped at frame 104, node picked up the copy at index 102 after 11.0 s silence (test grace 6 s), SIGCONT → handed back at frame 132, final `frames.bin` byte-identical to an unsplit 1-thread reference; no zero frames anywhere. `validate_api.py` (report `api_validation_nodes.json`) and `validate_queue.py` (report to scratch) pass. Browser on live :8766: chain chips for the user's cloudnode1 run, composer legs Mac→computenode1→cloudnode1 with per-leg estimates, standby and twin controls; no console errors. Fixed "Add machine" defaulting to a machine already in the chain.
+**Not measured on real machines:** standby pick-up, chains and twins against computenode1/cloudnode1 (they were busy with the user's runs; launching test workers there would compete). `tests/validate_node_live.py cloudnode1` not run for the same reason. Real sleep (lid close) not tested — SIGSTOP stands in for it; Wi-Fi may drop before the heartbeat stops, which the 90 s grace covers either way.
+
+**Server/runs.** Live :8766 restarted (LaunchAgent kickstart) at ~21:03 EDT onto this code after confirming: `55228a36ea55` (user-created, 5 galaxies, 30k, on cloudnode1, plan → computenode1 at 45%) kept running on the node, 32/32 frames on the Mac, no zero frames; `da12c4d2dfbc` (user-created, 1M, paused 4 frames) stayed paused (its in-RAM worker exited on SIGTERM); `67be855d5342` complete; `c9f32fae5585` paused 66. None created, resumed or removed by the agent. Standby is off for both user runs (created before the feature).
+
+## One-page observatory + compute nodes with checkpoint hand-off — Claude Opus 5.5, 2026-09-28
+
+User asked for Compute and Observe rebuilt as one seamless experience, and for runs to compute fully on the Mac, fully on `Edb@computenode1` (Tailscale), or split between them and visualized later, plus an always-on Oracle Cloud VM. For "split" the user chose **hand off one run** (serial, at checkpoints) and **Mac as hub**. Physics, ICs and frame formats are unchanged (`physics.py`, `stellar.py`, `worker.py` untouched, so no model-revision bump; `validate_physics.py` not re-run).
+
+**Backend.** New `outputs/observatory/nodes.py`: registry in `work/nodes.json` (gitignored; `OBSERVATORY_NODES` overrides), key-only `ssh -o BatchMode=yes` transport (tar streamed via Python `tarfile`), engine snapshot pushed per content hash, `nohup` remote launch, a sync loop that pulls status/diagnostics/log and appends only new frame bytes (`tail -c +N | head -c M`) before writing the Mac's `status.json`, and a hand-off state machine (pause → SIGTERM checkpoint → pull checkpoint pair + frames to the committed index → push small files + that pair → resume on target). Old frames are never pushed; the target's `frames.bin` is sparse before the hand-off index and never read there. `server.py`: one active experiment **per node** (`busy(node=…)`), `placement` stored in `config.json`, `location.json` per run (node, plan, per-node frame history, transfer state), remote control/resume/Remove, queue barrier per node, `recover()` skips remote runs and marks interrupted hand-offs failed, new endpoints (`/api/nodes`, probe, benchmark, `/api/jobs/:id/move`, `node`/`split` on create). Node estimates = Mac estimator × one measured speed factor (computenode1 seeded with 6.21 from `work/node-comparison`, 1M × 2 galaxies × 4 threads).
+
+**UI.** `lab.html`/`lab.js` removed; `/`, `/observe`, `/lab`, `/compute` all serve `index.html` (`/lab` opens the composer). `app.js` = library | stage | Run/New/Nodes panel; `viewer.js` = Three.js, imported lazily; **Layers → 3D rendering** disposes the GPU context. Composer previews ICs on the stage via `/api/preview` (camera fitted to the 90th-percentile radius). Timeline strip colours frame ranges by node. This supersedes the old "Compute tab loads no Three.js" rule — deliberate, per the request; the byte-capped frame cache stays.
+
+**Oracle.** Not created. Account signup and card verification must be done by the user (the agent does not create accounts or enter card details). `outputs/observatory/node/bootstrap.sh` prepares any Ubuntu x86/ARM VM (numpy, scipy, REBOUND 5.1.1 + OpenMP, Tailscale). Not executed on a real VM.
+
+**Measured.**
+- `work/venv/bin/python outputs/observatory/tests/validate_nodes.py` → `outputs/observatory/nodes_validation.json`, ok, 61.4 s (earlier runs 77 s). Fake `ssh` runs the "remote" shell locally under a temp `$HOME`. Remote planets 2,401 frames mirrored byte-identical (energy 1.17e-15); Mac and node computed concurrently; split Mac→node (hand-off at frame 57, 1.2 s), node→Mac (frame 93), manual node→Mac mid-run (frame 49): all three `frames.bin` **byte-identical** to an unsplit 1-thread reference (10k, 2 galaxies, lifecycle on, 151 frames); Remove deleted the node copy; unreachable node → 400 naming `ssh-copy-id`. A race found on the first run (a remote run finishing between syncs kept a 25 s start-up grace, so the node looked busy and a planned hand-off was skipped) is fixed and has a regression step.
+- `OBSERVATORY_NODES=<empty> OBSERVATORY_TEST_REPORT="$PWD/outputs/observatory/api_validation_nodes.json" PYTHONPATH="$PWD/work/openmp" work/venv/bin/python outputs/observatory/tests/validate_api.py` → ok, 9.9 s (page assertions updated for the single page; `api_validation_r4.json` not rewritten).
+- `validate_queue.py` with `OBSERVATORY_TEST_REPORT` (new override; `queue_validation.json` not rewritten) → all ten assertions true.
+- Browser (embedded, isolated :8768 + fake node): composed a 10k split run by clicking Start; watched Mac 49% → hand-off at frame 120 → node 84% "synced 2 s ago" → complete 232/232. 1440 px and 375 px (no horizontal overflow); no console errors in any check. Live :8766: 200k run plays at 60 FPS. The pane once reported 289,684 dropped console messages from earlier page instances; not reproducible afterwards (0 messages at any level over 8 s on Run and composer) — cause unknown.
+
+**computenode1 (measured 2026-09-28, after the user installed the key).** Account is lowercase `edb` (`Edb` is rejected); key installed by the user typing the password into a terminal command the agent started — the agent never entered it. Registry host is now `edb@computenode1` (speed 6.21 kept: same machine). App probe: ready, 4 cores x86_64, Python 3.14.4, REBOUND 5.1.1, numpy/scipy, 10 GB free RAM, 84 GB free disk, ~1 s SSH latency. `work/venv/bin/python outputs/observatory/tests/validate_node_live.py computenode1` (isolated :8767, temp data, node folder `work/remote-runs-test`, removed afterwards) → `outputs/observatory/node_live_computenode1.json`: remote planets 2,401 frames in 6.2 s wall, energy 1.56e-15. **Cross-architecture hand-off works both ways**: Mac(arm64)→node(x86_64) at frame 57 in 2.5 s and node→Mac at frame 54 in 3.1 s; both finish 151 frames, all finite, total mass 42.0 = reference. Mac→node frames are identical to the Mac reference up to and including the first frame after the hand-off; final max position difference 0.0094 (Mac→node) and 0.015 (node→Mac) model units (≈28 / 46 pc), i.e. floating-point differences between architectures amplified by N-body chaos — not an error bound. Stellar types diverge accordingly (density-biased births). Byte-identical splits therefore hold only within one architecture (the fake-node test). Not tried: moving the paused 1M run (a 1M checkpoint transfer over Tailscale, and ~6× slower stepping there per the 4-thread benchmark). Oracle VM not created; `bootstrap.sh` not run on a real VM.
+
+**Server.** Live :8766 restarted via LaunchAgent kickstart after confirming no worker (`worker_pid=null`). Jobs unchanged: `67be855d5342` complete 234, `c9f32fae5585` (1M) **paused 66**, not resumed, placement local. Node loop probes computenode1 every 45 s (currently reports the key error). Isolated test servers on 8767/8768 stopped.
+
+## Lab scheduler — 2026-09-22
+
+Added a separate coordinator in `lab/` on branch `lab-scheduler`. It does not change `physics.py`, `worker.py`, or `server.py`. Observatory data under `work/observatory-data` was not used. Historical `validation.json` / `validation_r3.json` / `api_validation.json` were not rewritten. `validate_physics.py` did rewrite `validation_r4.json`, which is that test's own output.
+
+Lab keeps job state in SQLite (`work/lab-data/lab.sqlite`, gitignored). Checkpoint archives are uploaded through `CheckpointStore`. The Drive implementation is rclone into the folder `Open Orbital Compute`. The current pointer moves only after the coordinator recomputes SHA-256. Workers cannot set it. Lease length is clamped to 5 hours. GitHub concurrency defaults to 1 and cannot be configured above 20. Oracle, Modal, Codespaces, and Google Spot are unimplemented backends with the same interface.
+
+Natural-language submit calls Jev on OpenRouter first and GPT-6 Luna only to draft a spec or to phrase missing-parameter questions. One `OPENROUTER_API_KEY` covers both. Missing particle count, duration, timestep, lifecycle, seed, or galaxy count stores no job. `--confirm-defaults` is required before unmentioned observatory fields are filled. Provenance records model revision, git commit, and that merger metrics are integrator diagnostics.
+
+**Measured.** `work/venv/bin/python -m unittest discover -s lab/tests -v` — 14 tests OK. That includes one real planetary year in a temp directory (phase `complete`, checkpoint file present; an isolated run of the same test took 0.983 s). Physics → `outputs/observatory/validation_r4.json` (14.3 s): 2048-particle energy change 4.395e-5 at dt 0.02 / θ 0.4 and 5.695e-6 at dt 0.01; two-galaxy head-on separation 19.79 → 16.44; retrograde L_z A=+2.06 B=-4.57; isolated vs `n_galaxies=1` max |Δstate| = 0. `rev2_reproduction_max_state_difference` is null in this workspace. API → `work/lab-data/api_validation_lab.json` (10.2 s, port 8767): `n_galaxies=6` rejected, five-galaxy N=10k OK, pause survives restart, recovered 201 frames, planets energy change 4.17e-16, protected DELETE rejected. Local observatory on 127.0.0.1:8766 was left running. No million-particle job was started.
+
+**Not measured here.** A live GitHub runner round trip. On computenode1, `LAB_GITHUB_TOKEN`, `OPENROUTER_API_KEY`, and a `[labdrive]` rclone remote are unset, and `TS_AUTHKEY` is not in the repo. The workflow file is on this branch and has not been pushed, so GitHub cannot dispatch it yet.
+
+**Coordinator.** computenode1 is running Lab under the user service `lab.service` (`systemctl --user is-active` returned `active`), listening on `127.0.0.1:8770` and `100.105.242.80:8770`. Observatory `server.py` pid 19196 is still on `127.0.0.1:8766`. Production `GET /api/jobs` is empty. A throwaway local smoke (`LAB_STORAGE=directory`, database `/tmp/lab-smoke.sqlite`, port 8771) completed planetary job `df5647e4013e`: shard checkpoint seq 1, sha256 prefix `75c38501389e`, used 0.001 worker-hours. That smoke process was stopped. It did not use Drive and did not write `work/observatory-data`. Linger is not enabled, so the user service can stop when every login session for `edb` ends.
+
+Operate the coordinator with `work/venv/bin/python -m lab serve` from the repo root. Secrets live in `work/lab-data/lab.env` and `work/lab-data/rclone.conf`. See `lab/README.md`.
+
+## CPU cap and service throttling correction — Codex, 2026-09-17
+
+Supersedes the P-core cap below: requested 14 now gives 14. Removed forced close binding, fixed captions/estimator, added validate_threads.py. Found LaunchAgent default ProcessType was throttling the workload; installer and installed plist now specify Interactive. Live checkpoint run 67be855d5342 resumed without resetting; 14 threads, ~1039% CPU in a ten-second measurement, frame 26 complete interval 13.017 s versus earlier 43.718 s. API/thread/browser checks passed. Full evidence, limitations and commands in outputs/observatory/CPU_DIAGNOSIS.md. Pre-existing dirty edits preserved; no commit combining another agent's work.
+
+
+## 1M run was on 14 threads including E-cores (2026-09-17)
+
+Live job `c9f32fae5585`: **1,000,000** particles, **14** OpenMP threads requested, **2 galaxies**, **lifecycle on**, duration 10, **paused at 66/168** frames (195 steps, 1430 s wall, last chunk **25 s**). Config still lists unused `companion_*` / bulge knobs; physics used clone defaults (`g2_sep=20`). This M4 Pro is **10 performance + 4 efficiency** cores (`hw.perflevel0.logicalcpu=10`). Barnes–Hut waits at a barrier, so the 4 E-threads leave P-cores idle — that matches Activity Monitor (E-cores packed, P-cores gappy). A 14-thread worker was still parked in RAM after Pause (peak footprint 889 MB, then swapped); SIGTERM left the job paused so Resume can spawn a new process. Saved `config.json` still says `threads=14` (not rewritten). Resume uses 10 P-cores. Did not auto-resume.
+
+Engine: `effective_threads()` caps OpenMP at P-cores, `OMP_PROC_BIND=close` / `OMP_PLACES=cores`, `OMP_DYNAMIC=false`, QoS `user-initiated` from inside the worker (`pthread_set_qos_class_self_np`). Did **not** wrap spawn in `taskpolicy` (that hung isolated API tests). Wait policy stays PASSIVE so a paused in-RAM worker would not spin.
+
+**Measured.** `effective_threads(14)→10`. `PYTHONPATH="$PWD/work/openmp" work/venv/bin/python outputs/observatory/tests/validate_api.py` (10.2 s, port 8767): `performance_cores=10`, `n_choices` 10k…1M, five-galaxy 10k OK, pause survives restart, isolated `n_galaxies=1` OK, planets energy 4.17e-16. LaunchAgent kickstart: Python PID 92037 on 8766, `GET /api/system` `performance_cores=10`, `worker_pid=null`, job still `paused` 66 frames. Browser `/lab`: CPU-threads hint names the P-core cap; 1M×14 draft estimate reads **10 P-cores (14 requested)** / 38.1 min (prediction). Historical JSON not rewritten.
 ## Linux compute-node setup — Codex, 2026-09-22 EDT
 
 Cloned the private GitHub repository to `/home/edb/open-orbital` on `edb@computenode1` (Ubuntu x86_64, Intel N150, 4 cores, 10 GiB RAM). Work is on local branch `codex/linux-compute-node`, starting from GitHub `origin/main` `29bde3f`; the local Mac thread-control source changes from `33709a5` were selectively ported without copying historical benchmark JSON. The node branch has not been pushed. Built a new Python 3.14 venv and a REBOUND 5.1.1 source build with `-fopenmp -DOPENMP`; `ldd work/openmp/librebound*.so` showed `libgomp.so.1`, and `validate_threads.py` confirmed an actual 4-thread OpenMP team. The Mac venv and native library were not copied. Saved-run, 120-hour, 24-run, disk-space, checkpoint, protected-run, and model-source archiving safeguards remain.

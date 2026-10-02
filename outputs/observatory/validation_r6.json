@@ -1,0 +1,120 @@
+{
+ "ssp": {
+  "returned_10gyr": 0.4227351364580686,
+  "returned_100myr": 0.2111836088510185,
+  "sn_per_msun": 0.010924502995094341,
+  "sn_done_by_myr": 55.23174339783884
+ },
+ "sph_collision": {
+  "time": 0.1855972331667062,
+  "kinetic_energy_ratio": 0.6018108037489481,
+  "momentum_change_relative": 1.0692040696739805e-15
+ },
+ "jeans_default_disk": {
+  "0.14": 1.096628356421373,
+  "0.59": 1.002807900418352,
+  "1.73": 1.0028306580479793,
+  "4.47": 1.0003445150511694,
+  "10.95": 0.9999417332653723,
+  "32.40": 0.9962618448729021,
+  "64.81": 1.000189987675368
+ },
+ "jeans_compact_bh": {
+  "0.14": 1.0142168068793451,
+  "0.59": 1.0011048339801358,
+  "1.73": 1.00803966323288,
+  "4.47": 1.0031865610241388,
+  "10.95": 1.0057436976417233,
+  "32.40": 0.978564098665362,
+  "64.81": 1.0061989874358548
+ },
+ "star_formation_law": {
+  "median_n_h": 204.64706766733863,
+  "expected_births": 300.26460205388764,
+  "births": 325,
+  "sigma": 1.4274694860890662
+ },
+ "equilibrium_rev5": {
+  "softening": 0.06,
+  "steps": 1000,
+  "wall_seconds": 112.49898219108582,
+  "halo_r10_r50_r90_max_change": [
+   0.02086057567373012,
+   0.01652832605702459,
+   0.02752856512543933
+  ],
+  "halo_r10_r50_r90_final_change": [
+   0.0003888244194550916,
+   0.01107627086885321,
+   0.02752856512543933
+  ],
+  "disk_c_over_a": [
+   0.039386725492137606,
+   0.07215516557209053
+  ]
+ },
+ "equilibrium_rev6": {
+  "softening": 0.07946810216710336,
+  "steps": 1000,
+  "wall_seconds": 130.749614238739,
+  "halo_r10_r50_r90_max_change": [
+   0.04409425391177746,
+   0.02672017620381195,
+   0.012995355930445651
+  ],
+  "halo_r10_r50_r90_final_change": [
+   0.00824764664174249,
+   0.00014848842428838438,
+   0.009256661229157137
+  ],
+  "disk_c_over_a": [
+   0.03851256597463354,
+   0.06214685862046685
+  ]
+ },
+ "worker": {
+  "phase": "complete",
+  "error": null,
+  "frames": 241,
+  "steps": 240,
+  "wall_seconds": 27.522418975830078,
+  "model_revision": 6,
+  "softening": 0.1444031249211319,
+  "dt_initial": 0.02,
+  "last_step": {
+   "dt": 0.0025000000000000577,
+   "limiter": "next saved frame",
+   "steps": 1,
+   "gas": 900,
+   "sf_particles": 0,
+   "dt_myr": 0.061250000000001414,
+   "dt_min_myr": 0.061250000000001414
+  },
+  "total_mass_first": 41.9999995501712,
+  "total_mass_last": 41.999999556283,
+  "gas_mass": 0.6005880820362823,
+  "births": 0,
+  "supernovae": 295659,
+  "feedback_momentum": 0.02216492440951131,
+  "resume": {
+   "interrupted_phase": "interrupted",
+   "interrupted_at_frame": 101,
+   "final_phase": "complete",
+   "frames_identical": true,
+   "max_position_difference": 0.0
+  }
+ },
+ "wall_seconds": 327.69870591163635,
+ "checks": {
+  "ssp_sn_per_msun_in_0p008_0p013": true,
+  "ssp_returned_10gyr_in_0p35_0p5": true,
+  "sph_momentum_exact": true,
+  "sph_dissipates": true,
+  "worker_complete": true,
+  "revision_6": true,
+  "mass_conserved": true,
+  "resume_exact": true,
+  "jeans_within_3pct_beyond_r0p5": true,
+  "star_formation_law_within_4sigma": true
+ }
+}
