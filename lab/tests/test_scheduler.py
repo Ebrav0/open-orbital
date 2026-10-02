@@ -1,4 +1,5 @@
 """Scheduler, lease, and checkpoint pointer tests. The store is in memory."""
+import hashlib
 import json
 import tempfile
 import threading
@@ -12,6 +13,7 @@ from lab.coordinator.db import Database
 from lab.observatory import server
 from lab.safety import accept_explicit, inclusive_values
 from lab.storage.memory import MemoryStore, file_sha256
+from lab.worker.agent import _publish
 from lab.worker.agent import run_once
 from lab.worker.bundle import pack, unpack
 
@@ -70,6 +72,7 @@ class SchedulerTests(unittest.TestCase):
         self.assertIsNotNone(second)
         self.assertEqual(second['checkpoint']['sha256'], published['current']['sha256'])
         self.assertEqual(second['shard_id'], first['shard_id'])
+        self.assertEqual(second['failures'], 1)
 
     def test_rejected_hash_does_not_move_the_pointer(self):
         self.db.create_job([planet_spec()], 'local', {}, self.cfg.budget_worker_hours)
@@ -172,6 +175,124 @@ class SchedulerTests(unittest.TestCase):
             httpd.server_close()
             os.environ.pop('LAB_URL', None)
 
+
+    def test_planned_handoff_can_cross_many_generations_and_checkpoint_sequence_continues(self):
+        self.db.create_job([planet_spec()], 'local', {}, 40.0, max_attempts=3)
+        cfg = replace(self.cfg, scratch=Path(self.tmp.name) / 'scratch', checkpoint_retention=3)
+        cfg.scratch.mkdir()
+        run_dir = Path(self.tmp.name) / 'run'
+        run_dir.mkdir()
+        (run_dir / 'meta.json').write_text(json.dumps({'n': 1, 'bytes_per_particle': 16, 'mode': 'planets'}))
+        (run_dir / 'checkpoint-000000.bin').write_bytes(b'state')
+        (run_dir / 'checkpoint.json').write_text(json.dumps({'file': 'checkpoint-000000.bin', 'index': 0}))
+        (run_dir / 'status.json').write_text('{"phase":"paused"}')
+        current = None
+        for generation in range(1, 6):
+            claim = self.db.claim(f'worker-{generation}', 'local', 'host', 18000, 120)
+            self.assertIsNotNone(claim)
+            self.assertEqual(claim['generation'], generation)
+            seq = _publish(cfg, self.store, _CheckpointClient(self.db, self.store), claim,
+                           claim['worker_id'], run_dir, int((claim.get('checkpoint') or {}).get('seq') or 0))
+            self.db.release(claim['lease_id'], claim['worker_id'], 'handoff')
+            current = self.db.current_checkpoint(claim['shard_id'])
+            self.assertEqual(seq, generation)
+        self.assertEqual(current['seq'], 5)
+        self.assertEqual(len(self.store.list_versions(f"jobs/{claim['job_id']}/shards/{claim['shard_id']}/checkpoints/")), 3)
+        shard = self.db.job(claim['job_id'])['shards'][0]
+        self.assertEqual(shard['failures'], 0)
+        self.assertEqual(shard['state'], 'pending')
+
+    def test_verified_result_is_required_and_idempotent_for_experiment_completion(self):
+        spec = planet_spec()
+        manifest = {'source': {'git_commit': '1' * 40}, 'runs': [{'config': spec, 'run_index': 0}]}
+        manifest['sha256'] = hashlib.sha256(json.dumps(manifest, sort_keys=True, separators=(',', ':'), ensure_ascii=False).encode()).hexdigest()
+        self.db.create_experiment('experiment1', 'jobid001', [spec], 'local', manifest,
+                                  {'objective': 'planet smoke'}, {'complete': True}, [],
+                                  'one short planet run', 2.0, manifest_key='experiments/experiment1/manifest.json',
+                                  resource_estimate={'total_worker_hours': 0.01})
+        self.db.save_conversation('clarify1', {'original_request': 'test', 'plan': {'mode': 'planets'}, 'dialogue': []}, 'waiting')
+        self.db.close()
+        self.db = Database(Path(self.tmp.name) / 'lab.sqlite', clock=self.clock)
+        self.assertEqual(self.db.get_conversation('clarify1')['state']['original_request'], 'test')
+        self.assertEqual(self.db.experiment('experiment1')['manifest']['revision'], 1)
+        claim = self.db.claim('worker', 'local', 'host', 18000, 120)
+        with self.assertRaisesRegex(ValueError, 'verified final result'):
+            self.db.release(claim['lease_id'], 'worker', 'complete')
+        result_path = Path(self.tmp.name) / 'final.tar.gz'
+        result_path.write_bytes(b'scientific-result')
+        digest = file_sha256(result_path)
+        key = 'experiments/experiment1/jobs/jobid001/results/final.tar.gz'
+        self.store.put(key, result_path)
+        accepted = self.db.save_result(claim['lease_id'], 'worker', key, digest, result_path.stat().st_size,
+                                       {'status': {'phase': 'complete'}}, self.store)
+        duplicate = self.db.save_result(claim['lease_id'], 'worker', key, digest, result_path.stat().st_size,
+                                       {'status': {'phase': 'complete'}}, self.store)
+        self.assertFalse(accepted['idempotent'])
+        self.assertTrue(duplicate['idempotent'])
+        self.db.release(claim['lease_id'], 'worker', 'complete')
+        self.assertEqual(self.db.experiment('experiment1')['status'], 'complete')
+        self.assertEqual(len(self.db.results_for_experiment('experiment1')), 1)
+
+    def test_short_budget_is_reserved_before_parallel_claims(self):
+        self.db.create_job([planet_spec(), planet_spec()], 'local', {}, 1.0)
+        first = self.db.claim('a', 'local', 'host', 18000, 120)
+        self.assertIsNotNone(first)
+        second = self.db.claim('b', 'local', 'host', 18000, 120)
+        self.assertIsNone(second)
+        self.assertEqual(self.db.job(first['job_id'])['status'], 'held')
+
+    def test_database_rejects_manifest_with_a_false_embedded_hash(self):
+        with self.assertRaisesRegex(ValueError, 'content does not match'):
+            self.db.create_experiment('badexp01', 'badjob01', [planet_spec()], 'local',
+                                      {'sha256': 'f' * 64, 'revision': 1, 'source': {}, 'runs': []},
+                                      {'objective': 'invalid hash'}, {}, [], 'test', 2.0,
+                                      resource_estimate={'total_worker_hours': .01})
+
+    def test_experiment_revision_preserves_history_and_uses_remaining_budget(self):
+        spec = planet_spec()
+        first = {'revision': 1, 'source': {'git_commit': '1' * 40}, 'runs': [{'config': spec, 'run_index': 0}]}
+        first['sha256'] = hashlib.sha256(json.dumps(first, sort_keys=True, separators=(',', ':'), ensure_ascii=False).encode()).hexdigest()
+        first_sha = first['sha256']
+        self.db.create_experiment('experiment2', 'jobrev01', [spec], 'local', first,
+                                  {'objective': 'planet smoke'}, {'complete': True}, [],
+                                  'one short planet run', 2.0, manifest_key='experiments/experiment2/manifests/v1.json',
+                                  resource_estimate={'total_worker_hours': .01})
+        claim = self.db.claim('revision-worker', 'local', 'host', 18000, 120)
+        with self.assertRaisesRegex(ValueError, 'Stop or finish'):
+            self.db.validate_experiment_revision('experiment2', .5, 2.0)
+        result_path = Path(self.tmp.name) / 'revision-1-result.tar.gz'
+        result_path.write_bytes(b'revision-one-result')
+        digest = file_sha256(result_path)
+        key = 'experiments/experiment2/jobs/jobrev01/results/result.tar.gz'
+        self.store.put(key, result_path)
+        self.clock.t += 3600
+        self.db.save_result(claim['lease_id'], claim['worker_id'], key, digest, result_path.stat().st_size,
+                            {'status': {'phase': 'complete'}}, self.store)
+        self.db.release(claim['lease_id'], claim['worker_id'], 'complete')
+        capacity = self.db.validate_experiment_revision('experiment2', .5, 2.0)
+        self.assertEqual(capacity['revision'], 2)
+        self.assertAlmostEqual(capacity['remaining_worker_hours'], 1.0)
+        with self.assertRaisesRegex(ValueError, 'only 1.00 remain'):
+            self.db.validate_experiment_revision('experiment2', 1.5, 2.0)
+
+        second = {'revision': 2, 'source': {'git_commit': '2' * 40}, 'runs': [{'config': spec, 'run_index': 0}]}
+        second['sha256'] = hashlib.sha256(json.dumps(second, sort_keys=True, separators=(',', ':'), ensure_ascii=False).encode()).hexdigest()
+        second_sha = second['sha256']
+        revised = self.db.create_experiment_revision(
+            'experiment2', 'jobrev02', [spec], 'local', second,
+            {'objective': 'planet smoke revised'}, {'complete': True}, [{'answer': 'revision request'}],
+            'one short planet run, revised', 2.0, manifest_key='experiments/experiment2/manifests/v2.json',
+            resource_estimate={'total_worker_hours': .5},
+        )
+        self.assertEqual(revised['current_revision'], 2)
+        self.assertEqual(revised['manifest']['sha256'], second_sha)
+        self.assertEqual(self.db.manifest('experiment2', 1)['sha256'], first_sha)
+        self.assertEqual(self.db.job('jobrev01')['status'], 'complete')
+        self.assertEqual(self.db.job('jobrev02')['budget_worker_hours'], 1.0)
+        self.assertEqual(self.db.results_for_experiment('experiment2'), [])
+        with self.assertRaisesRegex(ValueError, 'Stop or finish'):
+            self.db.validate_experiment_revision('experiment2', .1, 2.0)
+
     def _publish(self, claim):
         path = Path(self.tmp.name) / 'ok.tar.gz'
         path.write_bytes(b'checkpoint-one')
@@ -180,6 +301,17 @@ class SchedulerTests(unittest.TestCase):
         return self.db.stage_and_verify(
             claim['lease_id'], claim['worker_id'], 1, file_sha256(path), path.stat().st_size, key, self.store,
         )
+
+
+class _CheckpointClient:
+    def __init__(self, db, store):
+        self.db = db
+        self.store = store
+
+    def call(self, method, path, body):
+        self.assert_path = path
+        return self.db.stage_and_verify(body['lease_id'], body['worker_id'], body['seq'],
+                                        body['sha256'], body['size'], body['object_key'], self.store)
 
 
 class _Done:

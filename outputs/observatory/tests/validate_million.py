@@ -57,7 +57,7 @@ results['sustained_seconds']=step_s
 results['seconds_per_step']=step_s/n_steps
 results['finite_after_steps']=bool(np.all(np.isfinite(q)))
 assert results['finite_after_steps']
-assert results['seconds_per_step']<15.0  # generous; 8-thread 1M sphere was ~2.3 s/step
+assert results['seconds_per_step']<float(os.environ.get('OBSERVATORY_MAX_STEP_SECONDS','15.0'))  # machine-specific performance gate
 
 # Real worker path: short 1M run in an isolated folder (duration 0.4 → 20 leapfrog steps).
 td=tempfile.TemporaryDirectory(prefix='orbital-1m-')
@@ -90,6 +90,6 @@ results['frame_bytes']=frame_bytes
 assert frame_bytes==status['frames']*1000000*24
 td.cleanup()
 
-out=APP/'validation_1m.json'
+out=Path(os.environ.get('OBSERVATORY_TEST_REPORT',APP/'validation_1m.json'))
 out.write_text(json.dumps(results,indent=2))
 print(json.dumps(results,indent=2))

@@ -32,3 +32,11 @@ work/lab-data/
 
 # Machine-local compute-node registry (hosts, measured speed factors)
 work/nodes.json
+
+# Node-local validation and benchmark evidence (from the Linux compute-node port)
+work/linux-benchmarks/
+
+# Local worktree symlinks
+work/venv
+work/openmp
+work/linux-benchmarks

@@ -190,4 +190,4 @@ s=edge_sim();ensure_tree_box_for_step(s);s.steps(1)
 results['r5_tree_edge']=dict(unguarded_raises=raised,guarded_root=float(s.root_size),vx_after_escaper_unguarded=partial_vx,vx_after_escaper_guarded=s.particles[210].vx)
 assert raised and s.root_size>1024 and abs(partial_vx-s.particles[210].vx)>1e-4
 
-out=Path(__file__).resolve().parents[1]/'validation_r5.json';out.write_text(json.dumps(results,indent=2));print(json.dumps(results,indent=2))
+out=Path(__import__('os').environ.get('OBSERVATORY_TEST_REPORT',Path(__file__).resolve().parents[1]/'validation_r5.json'));out.write_text(json.dumps(results,indent=2));print(json.dumps(results,indent=2))

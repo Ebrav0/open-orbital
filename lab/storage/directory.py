@@ -1,4 +1,5 @@
 """Filesystem store. Two processes can share it. Drive remains the shared transport in production."""
+import os
 import shutil
 from pathlib import Path
 
@@ -14,7 +15,9 @@ class DirectoryStore(CheckpointStore):
     def put(self, key, path):
         dest = self._path(key)
         dest.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copyfile(path, dest)
+        temp = dest.with_name(dest.name + '.uploading')
+        shutil.copyfile(path, temp)
+        os.replace(temp, dest)
 
     def verify(self, key, sha256, size=None):
         dest = self._path(key)
@@ -41,6 +44,13 @@ class DirectoryStore(CheckpointStore):
             if path.is_file():
                 found.append(str(path.relative_to(self.root)))
         return sorted(found)
+
+    def delete(self, key):
+        path = self._path(key)
+        try:
+            path.unlink()
+        except FileNotFoundError:
+            return
 
     def _path(self, key):
         dest = (self.root / key).resolve()

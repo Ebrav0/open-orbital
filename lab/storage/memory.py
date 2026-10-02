@@ -41,3 +41,6 @@ class MemoryStore(CheckpointStore):
 
     def list_versions(self, prefix):
         return sorted(key for key in self.objects if key.startswith(prefix))
+
+    def delete(self, key):
+        self.objects.pop(key, None)

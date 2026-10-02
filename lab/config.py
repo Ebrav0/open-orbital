@@ -51,6 +51,9 @@ class Config:
     max_threads: int
     max_ram_mib: int
     max_runtime_hours: int
+    max_total_runs: int
+    max_storage_gib: float
+    checkpoint_retention: int
     budget_worker_hours: float
     max_attempts: int
     disk_floor_bytes: int
@@ -122,6 +125,9 @@ def load_config(path=None, env_path=None):
         max_threads=max(1, int(limits['max_threads'])),
         max_ram_mib=max(256, int(limits['max_ram_mib'])),
         max_runtime_hours=runtime,
+        max_total_runs=min(500, max(1, int(limits.get('max_total_runs', 500)))),
+        max_storage_gib=min(1000.0, max(0.1, float(limits.get('max_storage_gib', 100)))),
+        checkpoint_retention=min(5, max(2, int(limits.get('checkpoint_retention', 3)))),
         budget_worker_hours=float(limits['budget_worker_hours']),
         max_attempts=max(1, int(limits['max_attempts'])),
         disk_floor_bytes=int(limits['disk_floor_bytes']),

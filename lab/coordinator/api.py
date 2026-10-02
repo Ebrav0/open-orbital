@@ -11,7 +11,7 @@ class APIError(Exception):
         self.status = status
 
 
-def make_handler(db, store, token, grace, lease_seconds):
+def make_handler(db, store, token, grace, lease_seconds, drain_margin_seconds=0):
     class Handler(BaseHTTPRequestHandler):
         def log_message(self, fmt, *args):
             return
@@ -38,7 +38,8 @@ def make_handler(db, store, token, grace, lease_seconds):
                 if method == 'POST' and path == ['api', 'claim']:
                     claimed = db.claim(
                         body['worker_id'], body.get('backend', 'local'), body.get('host', ''),
-                        int(lease_seconds), grace,
+                        int(lease_seconds), grace, expected_commit=body.get('expected_commit') or None,
+                        drain_margin_seconds=int(drain_margin_seconds),
                     )
                     return self._send({'claim': claimed})
                 if method == 'POST' and path == ['api', 'heartbeat']:
@@ -46,6 +47,12 @@ def make_handler(db, store, token, grace, lease_seconds):
                 if method == 'POST' and path == ['api', 'release']:
                     db.release(body['lease_id'], body['worker_id'], body['reason'])
                     return self._send({'ok': True})
+                if method == 'POST' and path == ['api', 'results']:
+                    result = db.save_result(
+                        body['lease_id'], body['worker_id'], body['object_key'], body['sha256'],
+                        body['size'], body.get('metadata') or {}, store,
+                    )
+                    return self._send(result)
                 if method == 'POST' and path == ['api', 'checkpoints']:
                     result = db.stage_and_verify(
                         body['lease_id'], body['worker_id'], body['seq'], body['sha256'],
@@ -63,6 +70,8 @@ def make_handler(db, store, token, grace, lease_seconds):
                 self._send({'error': f'unknown id {exc}'}, 404)
             except (ValueError, TypeError) as exc:
                 self._send({'error': str(exc)}, 400)
+            except Exception:
+                self._send({'error': 'internal coordinator error'}, 500)
 
         def _auth(self):
             header = self.headers.get('Authorization', '')
@@ -92,8 +101,8 @@ def make_handler(db, store, token, grace, lease_seconds):
     return Handler
 
 
-def serve_http(db, store, token, grace, lease_seconds, hosts, port):
-    handler = make_handler(db, store, token, grace, lease_seconds)
+def serve_http(db, store, token, grace, lease_seconds, hosts, port, drain_margin_seconds=0):
+    handler = make_handler(db, store, token, grace, lease_seconds, drain_margin_seconds)
     servers = []
     for host in hosts:
         httpd = ThreadingHTTPServer((host, port), handler)

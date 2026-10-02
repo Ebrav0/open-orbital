@@ -7,7 +7,7 @@
 import os
 os.environ.setdefault('OMP_NUM_THREADS','1')
 os.environ.setdefault('OMP_WAIT_POLICY','PASSIVE')
-import ctypes,math
+import ctypes,ctypes.util,math,sys
 import numpy as np
 import rebound
 from scipy.special import iv,kv,j1
@@ -95,9 +95,11 @@ def set_threads(n):
     # Avoid forcing affinity on heterogeneous Apple cores; let macOS place the team.
     os.environ.setdefault('OMP_PROC_BIND','false')
     _set_worker_qos()
+    # macOS Homebrew libomp, or GNU libgomp on Linux nodes (the env vars above still apply if neither loads).
+    library=ctypes.util.find_library('gomp') if sys.platform.startswith('linux') else '/opt/homebrew/opt/libomp/lib/libomp.dylib'
     try:
-        omp=ctypes.CDLL('/opt/homebrew/opt/libomp/lib/libomp.dylib')
-        omp.omp_set_dynamic(0);omp.omp_set_num_threads(n)
+        if library:
+            omp=ctypes.CDLL(library);omp.omp_set_dynamic(0);omp.omp_set_num_threads(n)
     except OSError:pass
     return n
 

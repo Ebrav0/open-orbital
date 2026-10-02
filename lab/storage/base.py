@@ -18,3 +18,14 @@ class CheckpointStore:
 
     def list_versions(self, prefix: str) -> list:
         raise NotImplementedError
+
+    def delete(self, key: str) -> None:
+        raise NotImplementedError
+
+    def prune(self, prefix: str, keep: int) -> list[str]:
+        keep = max(1, int(keep))
+        versions = sorted(self.list_versions(prefix))
+        removed = versions[:-keep]
+        for key in removed:
+            self.delete(key)
+        return removed

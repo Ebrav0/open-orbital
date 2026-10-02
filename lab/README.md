@@ -1,143 +1,98 @@
-# Lab
+# Open Orbital Lab
 
-Lab schedules Open Orbital experiments. The observatory on port 8766 still owns interactive runs, frames, and the Compute page. Lab does not integrate physics and does not write into `work/observatory-data`.
+Lab turns a research request into a typed experiment plan, validates decisions, freezes an immutable manifest, expands it into reproducible runs, and schedules workers. The observatory on port 8766 continues to own interactive runs, frames, and its Compute page. Lab does not integrate physics itself and never writes into `work/observatory-data`.
 
-`computenode1` is the control plane. SQLite there is the only job database. Checkpoint bytes go through a `CheckpointStore`. The first store is Google Drive, folder `Open Orbital Compute`, via rclone. A checkpoint becomes current only after the coordinator downloads it and the SHA-256 matches. Workers cannot set that pointer.
+`computenode1` is the intended control plane. Its SQLite database owns experiments, revisions, jobs, leases, checkpoint pointers, results, and accounting. Checkpoint and result blobs use the `CheckpointStore` interface. Google Drive via rclone is the shared GitHub-worker transport; the directory provider is for local runs. SQLite decides which verified checkpoint is current.
 
-## Layout
+## Natural-language workflow
 
-- `lab submit`, `lab status`, `lab cancel`, `lab workers`, `lab serve`, `lab worker`
-- Jev (`typesafe/jev-1.13`) on OpenRouter decides whether a request states the required physics and which implemented backend to use.
-- GPT-6 Luna (`openai/gpt-6-luna`) writes the spec or the questions only when Jev cannot close the request.
-- `lab/safety.py` rejects anything outside the observatory schema, including a sixth galaxy, a run whose estimate exceeds 120 hours, and a protected observatory id.
-- Local workers run on the coordinator. GitHub workers are one `workflow_dispatch` each, capped at 5 hours, on `ubuntu-latest`.
-- Oracle, Modal, Codespaces, and Google Spot implement the same backend interface and raise a clear not-configured error.
+```sh
+work/venv/bin/python -m lab ask \
+  "Study three-galaxy collisions over 10 Gyr with 20 groups and 20 simulations per group, varying speeds and galaxy sizes."
+```
 
-Merger numbers stored with a job are integrator diagnostics. They are not astronomical observations, and a short run is not evidence of long-term stability.
+GPT-6 Luna (`openai/gpt-6-luna` by default) returns a versioned `ExperimentPlan` JSON candidate. The plan keeps the objective, supplied fields, inferences, unresolved decisions, fixed values, sweep dimensions, outputs, and estimates separate. Jev (`typesafe/jev-1.13`) returns structured field decisions. Deterministic code then enforces Open Orbital's schema, capabilities, run count, sampling requirements, resource caps, and budget; Jev cannot waive those rules.
 
-## Install the coordinator
+When required choices remain, Luna asks a small set of grouped questions. Lab stores the plan and dialogue in SQLite. Answer later without restarting:
 
-On `computenode1`, from the repository root:
+```sh
+work/venv/bin/python -m lab answer CONVERSATION_ID "Use 100k particles and sweep ..."
+```
+
+A ready plan goes through a disposable Open Orbital validation run and resource/storage preflight before scheduling. Without `--yes`, Lab asks before freezing; non-interactive mode prints a resumable command. A generated base seed is saved in the conversation before matrix expansion.
+
+The typed model is `lab/planner/models.py`. Galaxy duration may be supplied in Gyr and is converted using the current model revision. Galaxy time is model time (1 unit = 24.50 Myr); planetary duration is years. Galaxy experiments require an explicit resolution and design choices that materially affect the stated objective. Existing simulator defaults are recorded as defaults in the manifest.
+
+## Reproducibility and limits
+
+Each frozen manifest records the original request, clarification dialogue, final parameters, safe defaults, explicit sweep method and dimensions, generated per-run configs and seeds, model revision, source commit and source-tree fingerprint, planner/decision models, creation time, requested outputs, and resource estimate. Its SHA-256 is verified after upload. Manifests are immutable. `lab revise EXPERIMENT_ID "..."` asks Luna to update a stopped experiment and creates a new revision while preserving prior manifest, jobs, and results. Revise only after the current revision is complete, held, or cancelled and all workers have released leases. The configured worker-hour limit applies cumulatively across revisions. Workers validate their assigned run against that revision's manifest hash and run configuration.
+
+The matrix builder supports `grid`, `random`, `latin_hypercube`, and `user_defined`. Continuous ranges default to a recorded Latin-hypercube design when Luna does not specify a method; discrete explicit value lists use a grid. Every group gets the requested number of replicate simulations with a distinct deterministic seed. For example, 20 groups × 20 replicates creates 400 runs. A vague request to “vary” a parameter is not executable until the plan resolves its numeric values/ranges and sampling method.
+
+Before scheduling, Lab runs a temporary smoke computation, estimates runtime from node benchmark history and the Observatory estimator, and estimates retained-checkpoint plus final-result storage. These are predictions, not measured full-run durations. GitHub estimates are cross-host projections. The configured run, storage, per-run time, and worker-hour caps reject oversized work before the manifest is scheduled. The galaxy model is exploratory and collisionless, not a calibrated equilibrium model; a small preflight or short run does not demonstrate long-term stability.
+
+## Backends and worker handoff
+
+`LocalBackend` and `GitHubActionsBackend` are implemented. Other backends are explicit unconfigured stubs. The control plane may run up to 20 GitHub workers; the configuration loader clamps the ceiling to 20. A hosted run has a 330-minute workflow timeout and a lease capped at five hours. Workers stop at a valid checkpoint before the lease drain margin, verify checkpoint and result hashes, then release the shard for another generation. Unexpected runner loss expires its lease and requeues the shard from the latest verified checkpoint. Planned handoffs do not consume the failure retry count.
+
+GitHub Actions workers check out the exact manifest commit, verify it is reachable from the workflow's trusted branch, build a Linux OpenMP REBOUND runtime, join the private tailnet, claim one shard, and use Drive only for immutable blobs. Actions are pinned to full commit SHAs. Protect the configured `github.ref` against unreviewed changes because its workflow code receives the worker and Tailscale secrets. The workflow is `.github/workflows/lab-worker.yml`. `computenode1` should be reachable only over Tailscale on port 8770; do not expose the coordinator publicly. GitHub Actions are not dispatched until the workflow and its exact commit are pushed and the manifest points to that commit.
+
+## Setup on computenode1
+
+From the repository root:
 
 ```sh
 mkdir -p work/lab-data
-cp lab/env.example work/lab-data/lab.env
-cp lab/config.example.toml work/lab-data/lab.toml
+[ -e work/lab-data/lab.toml ] || cp lab/config.example.toml work/lab-data/lab.toml
+[ -e work/lab-data/lab.env ] || cp lab/env.example work/lab-data/lab.env
 ```
 
-Set `tailscale_host` in `work/lab-data/lab.toml` to this machine's Tailscale IPv4. Leave the port at 8770.
+Use the node's existing `work/venv` and native `work/openmp` runtime for local workers. Add `OPENROUTER_API_KEY` to the gitignored `work/lab-data/lab.env`. Set `server.tailscale_host` to the node's Tailscale IP for GitHub workers. Keep the listener on loopback plus that Tailscale address.
+
+For local-only use, configure `[storage] backend = "directory"`; this stores blobs under `work/lab-data/scratch/objects` for coordinator and local workers on the same node. For the GitHub backend, configure rclone with a private remote named `labdrive` and the folder `Open Orbital Compute`, then use `[storage] backend = "drive"`. The rclone config is `work/lab-data/rclone.conf`; it must never be committed.
+
+Start the coordinator and in-process scheduler:
 
 ```sh
 work/venv/bin/python -m lab serve
 ```
 
-The first launch writes `LAB_WORKER_TOKEN` into `work/lab-data/lab.env` when that line is empty. The process listens on `127.0.0.1:8770` and, when `tailscale_host` is set, on that address too. It does not bind the observatory port.
+The first start generates `LAB_WORKER_TOKEN` in `work/lab-data/lab.env` when absent. For a persistent user service, use a systemd unit with `WorkingDirectory=/home/edb/open-orbital` and `ExecStart=/home/edb/open-orbital/work/venv/bin/python -m lab serve`. Do not point it at the existing Observatory data folder or restart the Observatory service to deploy Lab.
 
-A user service, with linger so it survives logout:
+### Secrets
 
-```ini
-[Unit]
-Description=Open Orbital Lab coordinator
+Never commit secrets or paste them into chat.
 
-[Service]
-WorkingDirectory=/home/edb/open-orbital
-ExecStart=/home/edb/open-orbital/work/venv/bin/python -m lab serve
-Restart=on-failure
+- `work/lab-data/lab.env`: `OPENROUTER_API_KEY` for both models, `LAB_GITHUB_TOKEN` for coordinator workflow dispatch, and the generated `LAB_WORKER_TOKEN` for authenticated worker/coordinator API calls.
+- `work/lab-data/rclone.conf`: private `labdrive` credential with access only to the shared folder.
+- GitHub repository Actions secrets: `LAB_WORKER_TOKEN`, `TS_AUTHKEY` scoped to `tag:lab-worker`, and `RCLONE_CONFIG` containing the rclone config.
+- Tailscale ACL: allow `tag:lab-worker` to reach only the coordinator on TCP 8770.
 
-[Install]
-WantedBy=default.target
-```
+The current node setup has no OpenRouter key or GitHub token and no configured rclone remote, so remote models and the GitHub/Drive backend require local secret setup before use.
+
+## CLI
 
 ```sh
-systemctl --user daemon-reload
-systemctl --user enable --now lab.service
-loginctl enable-linger "$USER"
-```
-
-## Secrets
-
-Do not commit these and do not paste them into chat.
-
-Coordinator, gitignored:
-
-| File | What goes in it |
-|---|---|
-| `work/lab-data/lab.env` | `OPENROUTER_API_KEY` (Luna and Jev), `LAB_GITHUB_TOKEN` (Actions read/write, Contents read), `LAB_WORKER_TOKEN` (generated on first `lab serve`) |
-| `work/lab-data/rclone.conf` | rclone remote named `labdrive`, scoped to the Drive folder `Open Orbital Compute` |
-
-`lab/env.example` lists the variable names only.
-
-GitHub Actions secrets on `Ebrav0/open-orbital`, set in the repository settings:
-
-- `LAB_WORKER_TOKEN` — the same value as in `lab.env`
-- `TS_AUTHKEY` — a reusable, ephemeral, pre-authorized Tailscale auth key tagged `tag:lab-worker`
-- `RCLONE_CONFIG` — the contents of `work/lab-data/rclone.conf`
-
-The Tailscale ACL should allow `tag:lab-worker` to reach `computenode1` on TCP 8770 and nothing else. JSON specs and the unit tests do not need any of these. Natural-language submit needs the OpenRouter key. A GitHub runner needs all three secrets plus the ACL.
-
-Create the Drive remote on the coordinator:
-
-```sh
-rclone config --config work/lab-data/rclone.conf
-```
-
-Name it `labdrive`. The workflow and the coordinator both expect that name.
-
-## Commands
-
-```sh
-work/venv/bin/python -m lab submit --spec experiment.json --backend local
-work/venv/bin/python -m lab submit "Run 20 three-galaxy experiments varying impact parameter from 0-20 and compare merger outcomes"
-work/venv/bin/python -m lab status
-work/venv/bin/python -m lab status JOB_ID
-work/venv/bin/python -m lab cancel JOB_ID
+work/venv/bin/python -m lab ask "..." [--backend local|github] [--yes] [--no-interactive]
+work/venv/bin/python -m lab answer CONVERSATION_ID "..." [--backend local|github] [--yes]
+work/venv/bin/python -m lab schedule CONVERSATION_ID [--backend local|github] [--yes]
+work/venv/bin/python -m lab revise EXPERIMENT_ID "..." [--backend local|github] [--yes]
+work/venv/bin/python -m lab experiments
+work/venv/bin/python -m lab show EXPERIMENT_ID
+work/venv/bin/python -m lab jobs EXPERIMENT_ID
+work/venv/bin/python -m lab results EXPERIMENT_ID
+work/venv/bin/python -m lab analyze EXPERIMENT_ID
 work/venv/bin/python -m lab workers
-work/venv/bin/python -m lab worker --once --backend local
+work/venv/bin/python -m lab status [ID]
+work/venv/bin/python -m lab pause EXPERIMENT_ID
+work/venv/bin/python -m lab resume EXPERIMENT_ID
+work/venv/bin/python -m lab cancel EXPERIMENT_ID
+work/venv/bin/python -m lab quotas
 ```
 
-A natural-language submit that is missing particle count, duration, timestep, lifecycle, seed, or galaxy count prints questions and stores nothing. Repeat with `--confirm-defaults` only after those required values are in the request and you accept observatory defaults for the fields you did not name.
+`lab serve` automatically scales local processes and GitHub workflow runs to configured concurrency. `lab worker --once` is mainly for debugging or the GitHub workflow. Legacy explicit configs remain available as `lab submit --spec path.json --backend local`.
 
-An explicit spec may include a matrix:
-
-```json
-{
-  "mode": "galaxy",
-  "n": 10000,
-  "n_galaxies": 3,
-  "duration": 0.2,
-  "dt": 0.02,
-  "lifecycle_enabled": false,
-  "seed": 1,
-  "threads": 4,
-  "backend": "github",
-  "matrix": {"parameter": "g2_impact", "start": 0, "stop": 20, "count": 20}
-}
-```
-
-Checked-in GitHub concurrency is 1. Raise `github_concurrency` in `work/lab-data/lab.toml` up to 20. The loader clamps it there. The repository stays private; this does not switch it to public-runner pricing.
-
-## What a worker does
-
-1. Join Tailscale with an ephemeral auth key (GitHub) or run on the coordinator (local).
-2. Claim one pending shard. The lease is 5 hours and heartbeats cannot extend it.
-3. Fetch the current archive from the store, if there is one, and resume `outputs/observatory/worker.py`.
-4. Every checkpoint interval, pack `config.json`, `meta.json`, `checkpoint.json`, the rebound binary, baryons, status, and frames truncated to the committed index into `jobs/<job>/shards/<shard>/<seq>.tar.gz`.
-5. Upload with rclone's resumable Drive upload. The coordinator hashes the object. The previous current row stays current until the hash and size match.
-6. About 10 minutes before the lease deadline, pause the integrator, publish that checkpoint, release the shard, and exit. The workflow timeout is 330 minutes, inside the hosted runner's 6 hour kill.
-7. The scaler starts another runner. A runner that stops heartbeating loses the lease. The shard becomes pending at the last current checkpoint, or held after `max_attempts`.
-
-GitHub artifact storage is not used.
-
-## Recovery
-
-- Expired or killed runner: the shard returns to `pending` with the last verified checkpoint. Attempts are counted. At `max_attempts` the job is held for review.
-- Hash mismatch: that version is `rejected`. The pointer does not move.
-- Upload interrupted: the object is not current. The next attempt writes the next sequence after the current one.
-- Coordinator restart: SQLite and Drive still hold the pointer and the bytes. `lab serve` again and the scaler dispatches workers for pending shards.
-- Cancel: pending shards stop. A running worker sees `cancel` on its next heartbeat, publishes a checkpoint, and exits.
-- Observatory port 8766 is a different process. Stopping Lab does not stop it. Do not point both at the same experiment directory.
-
-## Tests
+## Validation
 
 ```sh
 work/venv/bin/python -m unittest discover -s lab/tests -v
@@ -145,4 +100,4 @@ PYTHONPATH="$PWD/work/openmp" work/venv/bin/python outputs/observatory/tests/val
 OBSERVATORY_TEST_REPORT="$PWD/work/lab-data/api_validation_lab.json" PYTHONPATH="$PWD/work/openmp" work/venv/bin/python outputs/observatory/tests/validate_api.py
 ```
 
-The unit tests use an in-memory store. `LAB_STORAGE=directory` uses a shared folder under `work/lab-data/scratch/objects` when two processes on one machine need to rehearse the verify step before Drive is configured. Production stays on `drive`.
+The API validator uses isolated port 8767 and the report path above, not historical benchmark evidence. The Lab end-to-end test uses a disposable temporary store/database and runs a real small Open Orbital computation through the authenticated coordinator API, then verifies checkpoint, log, and result uploads locally.

@@ -1,5 +1,45 @@
 # Agent handoff — Open Orbital
 
+## Branches reconciled; Real World Physics merged to main — Claude Opus 5.5, 2026-10-02
+
+The user asked to scan the other PR, merge or delete it, and get this update onto main.
+- **Merge.** `real-world-physics` (8c9db9b) and origin/main had diverged at 29bde3f: origin/main had the Linux port 3e9cd15 and PRs #3/#4; local had 33709a5. The merge was done in a separate git worktree. A first attempt in the live checkout conflicted and its abort failed ("not uptodate"); the checkout was restored to 8c9db9b within ~2 minutes with no job running.
+- **Resolution.**
+  - `lab/` and `.github/` come from origin/main (the reviewed PR #3/#4 versions supersede the 2026-09-22 working copy; no files existed only in the local copy).
+  - `lab.html`/`lab.js` stay deleted (one-page UI).
+  - Observatory code keeps this branch's side, with the Linux port added on top: libgomp lookup in `set_threads` (non-raising), `cpu_label()`, the `/proc` zombie check, `alive()` before a local spawn, caffeinate-aware sleep and platform-aware lid fields in /api/system, the portable `validate_threads.py`, the shared.js thread hint, and `OBSERVATORY_TEST_REPORT` for `validate_physics.py`. LINUX_*.md, the systemd unit and `benchmark_galaxy.py` come in from main.
+  - `.gitignore` is the union of both; both sides' HANDOFF entries are kept (the Codex lab entry moved under this title).
+- **PR #2** (draft, two-phase grid ISM, cursor/ism-gas-interactions-495d) was closed unmerged with an explanatory comment. It predates the revision-5 fixes and the one-page UI, reuses revision numbers 5/6 for other models, and would double gas pressure and SN kicks on top of SPH. Its head cf5f59f is kept as tag `archive/pr2-two-phase-ism` (its cooling/metals/ionization/FUV are the reference for a future SPH energy equation). Branch deleted.
+- **Deleted remote branches, verified contained in main:** `cursor/galaxy-collision-lab-428d` (content identical to squash 1c00db9) and `lab-scheduler` (ancestor of main).
+- **Left alone:** `codex/natural-language-research` has 3 commits from 2026-10-01 not in main or any PR (Cube control-plane launcher, Cube node docs, a 12-thread option). That is another agent's live work.
+- **Measured on the merged tree** (worktree with `work/venv`/`work/openmp` symlinks to the Mac runtime; every report written to the session scratchpad, so no evidence file was rewritten):
+  - `python -m unittest discover -s lab/tests` → 41 OK.
+  - `validate_physics.py` → exit 0, 39 s; 60/61 metrics identical to the historical `validation_r5.json` (only `lifecycle_speed40_2048.wall_seconds`).
+  - `validate_api.py` → exit 0, 11 s. `validate_queue.py` → exit 0, 17 s.
+  - `validate_realistic.py` → exit 0, 361 s, all 10 checks true.
+  - `validate_nodes.py` → ok, 211 s.
+  - Not run: `validate_million.py`, `validate_threads.py`, `validate_node_live.py`; browser check of the merged UI. The UI files equal this branch's side apart from one hint string.
+
+## Lab research interface — Codex, 2026-09-23 EDT
+
+Implemented the natural-language Lab workflow in isolated worktree `/home/edb/open-orbital-research`, branch `codex/natural-language-research`. Existing dirty Linux-port, Observatory, benchmark, and Lab prototype files remain unstaged and preserved. The original `/home/edb/open-orbital` checkout was not changed by this worktree.
+
+**Architecture.** Added a typed `ExperimentPlan`; Luna/OpenRouter draft and clarification calls; Jev/OpenRouter field decisions; hard deterministic schema, capability, sampling, run-count, runtime, storage, and budget validation; SQLite clarification state; seeded grid/random/Latin-hypercube/user-defined expansion; content-hashed immutable manifests; append-only manifest revisions tied to new jobs; cumulative experiment worker-hour accounting; per-revision result visibility; local/GitHub backends; a local-directory or rclone Drive `CheckpointStore`; hash-verified checkpoints/results/logs; retryable leases and five-hour worker generations; a private-tailnet GitHub Actions workflow pinned to immutable action SHAs and checking source-commit ancestry before secrets are exposed; compact result analysis summaries; and the `lab ask/answer/revise/schedule/experiments/show/jobs/results/analyze/workers/status/pause/resume/cancel/quotas` CLI. Updated `lab/README.md` with schema, workflow, limits, secrets, setup, and commands.
+
+Manifests retain the original request/dialogue, objective, resolved configs, sweep method, explicit per-run seeds, model/source revisions, model IDs, outputs, estimate, and SHA-256. A new revision is allowed only after the current job is complete, held, or cancelled and all leases are released. Prior manifest/job/result records remain stored; revisions consume the same cumulative worker-time budget.
+
+**Exact validation.** `work/venv/bin/python -m unittest discover -s lab/tests -v` → **PASS, 39 tests, 5.256 s**. Includes a disposable actual planetary Open Orbital worker run through the authenticated local coordinator API and verified checkpoint, log, and result; model calls are faked in tests, no model tokens used. Covers plan/clarification, invalid Jev approval, 400-job matrix, hash integrity, revisions/history/budget, claim race, lease expiry/recovery, five planned generations, scheduler DB restart/conversation persistence, checkpoint verification/retention, Drive failures, GitHub dispatch/pinning/errors and restart-unique dispatch IDs, and compact analysis.
+
+`OBSERVATORY_TEST_REPORT="$PWD/work/lab-data/api_validation_lab_research_20260923.json" PYTHONPATH="$PWD/work/openmp" work/venv/bin/python outputs/observatory/tests/validate_api.py` → **PASS, isolated port 8767**. It rejected bad schema knobs, 561-hour estimates over the 120-hour Observatory cap, and six galaxies; accepted five-galaxy N=10k; recovered a paused worker after restart to 201 frames; preserved the first frame; rejected invalid frames, a concurrent job, running/protected deletes; and measured planetary energy change `2.7822544906128414e-16`. The new JSON report is under ignored `work/lab-data/`; no historical benchmark file was changed. `git diff --check` → PASS. Physics validation was not rerun because no physics source changed.
+
+**External integration not yet verified.** The node has no `OPENROUTER_API_KEY`, no `LAB_GITHUB_TOKEN`, and the existing rclone config has no remote configured. Therefore the real Luna→Jev exchange, Drive transfer, GitHub dispatch, hosted Linux build, and requested GitHub-worker end-to-end computation could not run. Do not describe the fake-model/local E2E as the hosted workflow test. The Actions workflow is present but uncommitted/unpushed. Follow `lab/README.md` to configure secrets, private Drive folder, Tailscale ACL and coordinator URL; then review/commit/push this feature branch and run a one-shard planetary experiment before a larger study.
+
+**Live state at handoff.** Existing `open-orbital.service` and `lab.service` on the original node checkout are both `active`; authenticated Lab API reported zero jobs and Observatory API reported zero saved jobs. The validator and unit tests used temporary data. No new service was started, no production job was submitted, and no Observatory run/benchmark evidence was modified.
+
+**Outstanding checks/limits.** Hosted Action/YAML/API behavior and Google Drive rclone transfers still need a credentialed end-to-end rehearsal. Provider/free-tier quota is not synchronized automatically; `lab quotas` reports local configured/recorded limits. Galaxy runtime and storage estimates are projections from short node benchmark history and the Observatory estimator, not measured full-run durations. The galaxy model remains exploratory and collisionless. GitHub workers require a clean pushed commit whose manifest SHA matches their checkout. Changes remain uncommitted in the isolated worktree pending review.
+
+---
+
 ## cloudnode1 (OVH) retired — Claude Opus 5.5, 2026-10-01
 
 User has a new VM and asked to clear cloudnode1 from the codebase. Done:
@@ -223,6 +263,43 @@ Live job `c9f32fae5585`: **1,000,000** particles, **14** OpenMP threads requeste
 Engine: `effective_threads()` caps OpenMP at P-cores, `OMP_PROC_BIND=close` / `OMP_PLACES=cores`, `OMP_DYNAMIC=false`, QoS `user-initiated` from inside the worker (`pthread_set_qos_class_self_np`). Did **not** wrap spawn in `taskpolicy` (that hung isolated API tests). Wait policy stays PASSIVE so a paused in-RAM worker would not spin.
 
 **Measured.** `effective_threads(14)→10`. `PYTHONPATH="$PWD/work/openmp" work/venv/bin/python outputs/observatory/tests/validate_api.py` (10.2 s, port 8767): `performance_cores=10`, `n_choices` 10k…1M, five-galaxy 10k OK, pause survives restart, isolated `n_galaxies=1` OK, planets energy 4.17e-16. LaunchAgent kickstart: Python PID 92037 on 8766, `GET /api/system` `performance_cores=10`, `worker_pid=null`, job still `paused` 66 frames. Browser `/lab`: CPU-threads hint names the P-core cap; 1M×14 draft estimate reads **10 P-cores (14 requested)** / 38.1 min (prediction). Historical JSON not rewritten.
+## Linux compute-node setup — Codex, 2026-09-22 EDT
+
+Cloned the private GitHub repository to `/home/edb/open-orbital` on `edb@computenode1` (Ubuntu x86_64, Intel N150, 4 cores, 10 GiB RAM). Work is on local branch `codex/linux-compute-node`, starting from GitHub `origin/main` `29bde3f`; the local Mac thread-control source changes from `33709a5` were selectively ported without copying historical benchmark JSON. The node branch has not been pushed. Built a new Python 3.14 venv and a REBOUND 5.1.1 source build with `-fopenmp -DOPENMP`; `ldd work/openmp/librebound*.so` showed `libgomp.so.1`, and `validate_threads.py` confirmed an actual 4-thread OpenMP team. The Mac venv and native library were not copied. Saved-run, 120-hour, 24-run, disk-space, checkpoint, protected-run, and model-source archiving safeguards remain.
+
+The Linux port uses `libgomp` in `set_threads`, reports the node CPU in `/api/system`, and keeps the HTTP listener on loopback. Fixed paused-worker resume so a live `Popen` handle is retained, with Linux zombie detection for adopted PIDs; the first queue test stalled before this fix, and all ten queue checks passed afterwards. The original performance gate in `validate_million.py` remains 15 s/step by default; the node test used `OBSERVATORY_MAX_STEP_SECONDS=120` because this N150 is slower. Historical benchmark JSON was not edited. Node validation and benchmark evidence is under `work/linux-benchmarks/`; the same-script Mac comparison is under `work/node-comparison/` on the Mac. Full measurements and limits are in `outputs/observatory/LINUX_BENCHMARK_2026-09-22.md`.
+
+**Exact validation commands and results**, from `/home/edb/open-orbital`:
+
+```sh
+PYTHONPATH="$PWD/work/openmp" work/venv/bin/python outputs/observatory/tests/validate_threads.py
+# PASS: requested/effective/OpenMP maximum = 4
+PYTHONPATH="$PWD/work/openmp" OMP_NUM_THREADS=4 OBSERVATORY_TEST_REPORT="$PWD/work/linux-benchmarks/validation_physics.json" work/venv/bin/python outputs/observatory/tests/validate_physics.py
+# PASS: 2048-particle energy 4.395e-5 at dt=.02, 5.695e-6 at dt=.01; checkpoint and isolated IC delta 0
+PYTHONPATH="$PWD/work/openmp" OMP_NUM_THREADS=4 OBSERVATORY_TEST_REPORT="$PWD/work/linux-benchmarks/validation_api_final.json" work/venv/bin/python outputs/observatory/tests/validate_api.py
+# PASS: planetary energy 2.78e-16; pause/restart and API safeguards
+PYTHONPATH="$PWD/work/openmp" OMP_NUM_THREADS=4 OBSERVATORY_TEST_REPORT="$PWD/work/linux-benchmarks/validation_queue.json" work/venv/bin/python outputs/observatory/tests/validate_queue.py
+# PASS: all ten queue/restart assertions
+PYTHONPATH="$PWD/work/openmp" OMP_NUM_THREADS=4 OBSERVATORY_MAX_STEP_SECONDS=120 OBSERVATORY_TEST_REPORT="$PWD/work/linux-benchmarks/validation_million.json" work/venv/bin/python outputs/observatory/tests/validate_million.py
+# PASS: 1M sustained 20 steps, 51.68 s/step; checkpointed worker 20 steps, 21 frames, 504 MB, no error
+```
+
+**Benchmark command/result.** Sequentially ran `benchmark_galaxy.py` with `OMP_NUM_THREADS=4` and `--threads 4` at 10k/30k/100k/200k/500k/1M particles, using 8/5/4/3/2/2 timed steps.
+
+```sh
+for spec in 10000:8 30000:5 100000:4 200000:3 500000:2 1000000:2; do
+    n=${spec%%:*}; steps=${spec##*:}
+    PYTHONPATH="$PWD/work/openmp" OMP_NUM_THREADS=4 \
+      work/venv/bin/python outputs/observatory/tests/benchmark_galaxy.py \
+      --n "$n" --threads 4 --steps "$steps"
+done
+```
+
+Node two-galaxy times were 0.0822/0.3926/2.6273/6.7536/21.9626/51.3611 s/step, respectively. The matching Mac times were 0.0204/0.0944/0.4410/1.1054/3.4994/8.2690 s/step. These are short-run measurements, not full-job ETAs. Electrical watts were not measured; the node has no readable RAPL counter.
+
+**Service and UI.** Installed and enabled `~/.config/systemd/user/open-orbital.service`, enabled user linger, and started the service after benchmarks. `systemctl --user is-active open-orbital.service` → `active`; `GET http://127.0.0.1:8766/api/system` → Intel N150, 4 cores, 120 h cap, 24 runs, daemon true; `GET /api/jobs?view=summary` → `[]`. Tailscale address `100.105.242.80`; SSH forward to node loopback returned HTTP 200 for `/api/system`, `/lab`, and `/`. Browser checks on the final Linux UI switched Galaxy/Planetary modes, showed the 0/24 empty library, had no horizontal overflow at 1920 or 700 px, and had zero console warnings/errors; the earlier connection-refused console messages came only from an expiring temporary SSH tunnel. No science job is running. Exact start and tunnel commands are in `outputs/observatory/LINUX_COMPUTE_NODE.md`.
+
+**Outstanding limits.** This was a short integration and worker validation, not a calibrated galaxy or proof of long-term equilibrium. Full-run timing, electrical power, and cross-host energy efficiency have not been measured. The node branch and report are local to `computenode1` until explicitly pushed.
 
 
 ## Rebase onto collision lab (2026-09-17)

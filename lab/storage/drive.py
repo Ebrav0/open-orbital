@@ -52,6 +52,9 @@ class RcloneDriveStore(CheckpointStore):
                 names.append(f'{prefix.rstrip("/")}/{name}' if not name.startswith(prefix) else name)
         return names
 
+    def delete(self, key):
+        self.runner(self._base_args() + ['deletefile', self._remote(key)])
+
     def _remote(self, key):
         key = key.lstrip('/')
         return f'{self.remote}:{self.folder}/{key}'

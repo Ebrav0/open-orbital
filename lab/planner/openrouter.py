@@ -1,5 +1,6 @@
-"""OpenRouter calls. One key covers Jev and Luna."""
+"""OpenRouter JSON calls for Luna planning and Jev's constrained decisions."""
 import json
+import urllib.error
 import urllib.request
 
 
@@ -13,6 +14,7 @@ class OpenRouter:
         self._post = post or _post
 
     def decisions(self, state, questions):
+        """Retained for the original NOUL prototype; new planning uses structured chat."""
         self._require_key()
         return self._post(self.cfg.decisions_url, {
             'model': self.cfg.jev_model,
@@ -20,12 +22,13 @@ class OpenRouter:
             'questions': questions,
         }, self.cfg.openrouter_api_key)
 
-    def chat(self, messages):
+    def chat(self, messages, model=None, temperature=0):
         self._require_key()
         return self._post(self.cfg.chat_url, {
-            'model': self.cfg.luna_model,
+            'model': model or self.cfg.luna_model,
             'messages': messages,
-            'provider': {'sort': self.cfg.luna_provider_sort},
+            'temperature': temperature,
+            'provider': {'sort': self.cfg.luna_provider_sort} if (model or self.cfg.luna_model) == self.cfg.luna_model else {},
             'response_format': {'type': 'json_object'},
         }, self.cfg.openrouter_api_key)
 
@@ -42,8 +45,10 @@ def _post(url, body, key):
         method='POST',
     )
     try:
-        with urllib.request.urlopen(request, timeout=60) as response:
+        with urllib.request.urlopen(request, timeout=90) as response:
             return json.loads(response.read().decode())
     except urllib.error.HTTPError as exc:
         detail = exc.read().decode(errors='replace')[:400]
         raise PlannerError(f'OpenRouter returned {exc.code}: {detail}') from exc
+    except (urllib.error.URLError, TimeoutError) as exc:
+        raise PlannerError(f'OpenRouter request failed: {exc}') from exc

@@ -37,6 +37,7 @@ def serve(cfg, db, store, backends=None):
     token = ensure_token(cfg)
     servers = serve_http(
         db, store, token, cfg.heartbeat_grace_seconds, cfg.lease_seconds, cfg.listen_hosts, cfg.port,
+        drain_margin_seconds=cfg.drain_margin_seconds,
     )
     local = LocalBackend()
     github = GitHubBackend(cfg, active=lambda: db.active_leases('github') + db.dispatching_count('github', 900))
@@ -74,29 +75,55 @@ def serve(cfg, db, store, backends=None):
 
 
 def _scale(cfg, db, backend, adapter, limit):
+    if backend == 'github':
+        active = db.active_leases('github') + db.dispatching_count('github', 900)
+        room = max(0, min(20, int(limit)) - active)
+        if room <= 0:
+            return
+        for group in db.pending_commits('github'):
+            if room <= 0:
+                break
+            commit = group['git_commit']
+            if not commit:
+                if not getattr(adapter, 'reported_unpinned', False):
+                    db.event('launch_failed', {'backend': 'github', 'error': 'Experiment has no pinned commit SHA'})
+                    adapter.reported_unpinned = True
+                continue
+            count = min(int(group['pending']), room)
+            try:
+                started = adapter.launch(count, {'coordinator_url': _url(cfg), 'git_commit': commit})
+            except NotConfigured as exc:
+                for ident in getattr(exc, 'started', []):
+                    db.note_dispatch(backend, ident)
+                if not getattr(adapter, 'reported_unconfigured', False):
+                    db.event('launch_failed', {'backend': backend, 'error': str(exc)})
+                    adapter.reported_unconfigured = True
+                return
+            except Exception as exc:
+                for ident in getattr(exc, 'started', []):
+                    db.note_dispatch(backend, ident)
+                db.event('scaler_error', {'backend': backend, 'error': str(exc)})
+                return
+            for ident in started:
+                db.note_dispatch(backend, ident)
+            room -= len(started)
+        return
+
     pending = db.pending_count(backend)
     if pending <= 0:
         return
-    active = adapter.active_count()
-    if backend == 'github':
-        active = db.active_leases('github') + db.dispatching_count('github', 900)
-    room = max(0, limit - active)
+    room = max(0, int(limit) - adapter.active_count())
     count = min(pending, room)
     if count <= 0:
         return
     try:
-        started = adapter.launch(count, {'coordinator_url': _url(cfg)})
+        adapter.launch(count, {'coordinator_url': _url(cfg)})
     except NotConfigured as exc:
         if not getattr(adapter, 'reported_unconfigured', False):
             db.event('launch_failed', {'backend': backend, 'error': str(exc)})
             adapter.reported_unconfigured = True
-        return
     except Exception as exc:
         db.event('scaler_error', {'backend': backend, 'error': str(exc)})
-        return
-    for ident in started:
-        if backend == 'github':
-            db.note_dispatch(backend, ident)
 
 
 def _url(cfg):
